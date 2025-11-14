@@ -1,0 +1,17 @@
+{
+  "initial_amount": 1000000.0,
+  "max_daily_profit": 0.5,
+  "max_daily_loss": 0.03,
+  "max_positions": 20,
+  "max_position_size": 0.3,
+  "stop_loss_rate": 0.02,
+  "paper_trading": true,
+  "daily_trade_limit": false,
+  "compound_interest": true,
+  "min_trade_amount": 100000.0,
+  "claude_interval": 30,
+  "telegram_interval": 30,
+  "include_fees": true,
+  "upbit_fee_rate": 0.0005,
+  "target_coins": []
+}

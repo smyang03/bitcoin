@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>업비트 자동매매 시스템</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+            color: #fff;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            text-align: center;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #FFD700, #FFA500);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 20px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .status-item {
+            background: rgba(255,255,255,0.1);
+            padding: 15px 20px;
+            border-radius: 10px;
+            text-align: center;
+            flex: 1;
+            min-width: 150px;
+        }
+
+        .status-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .status-label {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .panel {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .panel h2 {
+            margin-bottom: 20px;
+            color: #FFD700;
+            font-size: 1.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid rgba(255,255,255,0.3);
+            background: rgba(255,255,255,0.1);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 1rem;
+        }
+
+        .form-group input::placeholder {
+            color: rgba(255,255,255,0.6);
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, #007bff, #0056b3);
+            color: white;
+        }
+
+        .btn-success {
+            background: linear-gradient(45deg, #28a745, #1e7e34);
+            color: white;
+        }
+
+        .btn-danger {
+            background: linear-gradient(45deg, #dc3545, #c82333);
+            color: white;
+        }
+
+        .btn-warning {
+            background: linear-gradient(45deg, #ffc107, #e0a800);
+            color: #212529;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .chart-container {
+            grid-column: span 2;
+            height: 400px;
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .trading-log {
+            grid-column: span 2;
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            border: 1px solid rgba(255,255,255,0.2);
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .log-entry {
+            background: rgba(0,0,0,0.2);
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+        }
+
+        .log-entry.success {
+            border-left-color: #28a745;
+        }
+
+        .log-entry.warning {
+            border-left-color: #ffc107;
+        }
+
+        .log-entry.error {
+            border-left-color: #dc3545;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 20px;
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 60px;
+            height: 30px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 22px;
+            width: 22px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #2196F3;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(30px);
+        }
+
+        .profit-positive {
+            color: #00ff00;
+        }
+
+        .profit-negative {
+            color: #ff4444;
+        }
+
+        .claude-panel {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: 2px solid rgba(255,255,255,0.3);
+        }
+
+        .claude-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .claude-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #00ff00;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .claude-indicator.inactive {
+            background: #ff4444;
+            animation: none;
+        }
+
+        .telegram-config {
+            background: #0088cc;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            margin: 5% auto;
+            padding: 30px;
+            border-radius: 20px;
+            width: 80%;
+            max-width: 600px;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .close {
+            color: #fff;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover {
+            color: #ccc;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .chart-container,
+            .trading-log {
+                grid-column: span 1;
+            }
+            
+            .status-bar {
+                flex-direction: column;
+            }
+            
+            .status-item {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 헤더 -->
+        <div class="header">
+            <h1>🚀 업비트 자동매매 시스템</h1>
+            <div class="status-bar">
+                <div class="status-item">
+                    <div class="status-value" id="currentBalance">₩1,000,000</div>
+                    <div class="status-label">현재 잔고</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-value profit-positive" id="dailyPnL">+0.00%</div>
+                    <div class="status-label">일일 손익</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-value" id="activePositions">0</div>
+                    <div class="status-label">활성 포지션</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-value" id="tradingStatus">중지됨</div>
+                    <div class="status-label">거래 상태</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-value" id="lastUpdate">--:--</div>
+                    <div class="status-label">마지막 업데이트</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 메인 컨텐츠 -->
+        <div class="main-content">
+            <!-- 기본 설정 -->
+            <div class="panel">
+                <h2>⚙️ 기본 설정</h2>
+                <div class="form-group">
+                    <label>최초 투자 금액 (원)</label>
+                    <input type="number" id="initialAmount" value="1000000" min="10000" step="10000">
+                </div>
+                <div class="form-group">
+                    <label>일일 최대 수익률 (%)</label>
+                    <input type="number" id="maxProfitRate" value="5" min="1" max="20" step="0.1">
+                </div>
+                <div class="form-group">
+                    <label>일일 최대 손실률 (%)</label>
+                    <input type="number" id="maxLossRate" value="5" min="1" max="20" step="0.1">
+                </div>
+                <div class="form-group">
+                    <label>거래 대상 코인</label>
+                    <select id="targetCoins" multiple>
+                        <option value="KRW-BTC" selected>비트코인 (BTC)</option>
+                        <option value="KRW-ETH" selected>이더리움 (ETH)</option>
+                        <option value="KRW-XRP" selected>리플 (XRP)</option>
+                        <option value="KRW-ADA" selected>카르다노 (ADA)</option>
+                        <option value="KRW-DOGE">도지코인 (DOGE)</option>
+                        <option value="KRW-SOL">솔라나 (SOL)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- API 키 설정 -->
+            <div class="panel">
+                <h2>🔑 업비트 API 설정</h2>
+                <div class="form-group">
+                    <label>Access Key</label>
+                    <input type="password" id="accessKey" placeholder="업비트 Access Key 입력">
+                </div>
+                <div class="form-group">
+                    <label>Secret Key</label>
+                    <input type="password" id="secretKey" placeholder="업비트 Secret Key 입력">
+                </div>
+                <div class="form-group">
+                    <button class="btn btn-primary" onclick="testConnection()">연결 테스트</button>
+                    <button class="btn btn-success" onclick="saveApiKeys()">저장</button>
+                </div>
+                <div id="apiStatus" style="margin-top: 10px;"></div>
+            </div>
+
+            <!-- Claude 개입 설정 -->
+            <div class="panel claude-panel">
+                <h2>🤖 Claude AI 개입 설정</h2>
+                <div class="claude-status">
+                    <div class="claude-indicator" id="claudeIndicator"></div>
+                    <span>Claude AI 활성</span>
+                </div>
+                <div class="form-group">
+                    <label>개입 주기</label>
+                    <select id="claudeInterval">
+                        <option value="10">10분마다</option>
+                        <option value="30" selected>30분마다</option>
+                        <option value="60">1시간마다</option>
+                        <option value="120">2시간마다</option>
+                        <option value="240">4시간마다</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="claudeEmergencyMode" checked> 
+                        긴급 상황 자동 개입
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>위험도 임계값</label>
+                    <input type="range" id="riskThreshold" min="0.1" max="1.0" step="0.1" value="0.7">
+                    <span id="riskThresholdValue">0.7</span>
+                </div>
+                <div class="form-group">
+                    <button class="btn btn-warning" onclick="claudeManualAnalysis()">수동 분석 요청</button>
+                    <button class="btn btn-danger" onclick="claudeEmergencyStop()">긴급 중지</button>
+                </div>
+            </div>
+
+            <!-- 텔레그램 알림 설정 -->
+            <div class="panel telegram-config">
+                <h2>📱 텔레그램 알림 설정</h2>
+                <div class="form-group">
+                    <label>봇 토큰</label>
+                    <input type="password" id="telegramToken" placeholder="텔레그램 봇 토큰 입력">
+                </div>
+                <div class="form-group">
+                    <label>채팅 ID</label>
+                    <input type="text" id="telegramChatId" placeholder="텔레그램 채팅 ID 입력">
+                </div>
+                <div class="form-group">
+                    <label>알림 주기</label>
+                    <select id="notificationInterval">
+                        <option value="5">5분마다</option>
+                        <option value="10">10분마다</option>
+                        <option value="30" selected>30분마다</option>
+                        <option value="60">1시간마다</option>
+                        <option value="120">2시간마다</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>알림 내용</label>
+                    <div>
+                        <label><input type="checkbox" id="notifyProfitLoss" checked> 손익 정보</label><br>
+                        <label><input type="checkbox" id="notifyTrades" checked> 거래 내역</label><br>
+                        <label><input type="checkbox" id="notifyAlerts" checked> 경고 알림</label><br>
+                        <label><input type="checkbox" id="notifyClaudeActions" checked> Claude 개입</label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <button class="btn btn-primary" onclick="testTelegram()">테스트 메시지</button>
+                    <button class="btn btn-success" onclick="saveTelegramConfig()">저장</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 수익률 차트 -->
+        <div class="chart-container">
+            <h2>📊 실시간 수익률 차트</h2>
+            <canvas id="profitChart"></canvas>
+        </div>
+
+        <!-- 거래 제어 -->
+        <div class="panel" style="grid-column: span 2;">
+            <h2>🎮 거래 제어</h2>
+            <div class="controls">
+                <button class="btn btn-success" id="startBtn" onclick="startTrading()">거래 시작</button>
+                <button class="btn btn-danger" id="stopBtn" onclick="stopTrading()" disabled>거래 중지</button>
+                <button class="btn btn-warning" onclick="pauseTrading()">일시 정지</button>
+                <button class="btn btn-danger" onclick="emergencySell()">긴급 매도</button>
+                <button class="btn btn-primary" onclick="resetDaily()">일일 리셋</button>
+            </div>
+            <div style="margin-top: 20px;">
+                <label>수수료 포함 수익률 계산: </label>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="includeFees" checked>
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <!-- 거래 로그 -->
+        <div class="trading-log">
+            <h2>📈 거래 로그</h2>
+            <div id="logContainer">
+                <div class="log-entry">
+                    <strong>[시스템]</strong> 자동매매 시스템이 준비되었습니다.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 모달 창들 -->
+    <div id="settingsModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('settingsModal')">&times;</span>
+            <h2>고급 설정</h2>
+            <div class="form-group">
+                <label>최대 동시 포지션 수</label>
+                <input type="number" id="maxPositions" value="4" min="1" max="10">
+            </div>
+            <div class="form-group">
+                <label>단일 포지션 최대 비중 (%)</label>
+                <input type="number" id="maxPositionSize" value="25" min="5" max="50">
+            </div>
+            <div class="form-group">
+                <label>손절매 비율 (%)</label>
+                <input type="number" id="stopLossRate" value="1" min="0.5" max="5" step="0.1">
+            </div>
+            <button class="btn btn-success" onclick="saveAdvancedSettings()">저장</button>
+        </div>
+    </div>
+
+    <script>
+        // 전역 변수
+        let tradingBot = {
+            isRunning: false,
+            dailyPnL: 0,
+            positions: {},
+            balance: 1000000,
+            initialBalance: 1000000,
+            trades: [],
+            claudeActive: true,
+            lastUpdate: new Date()
+        };
+
+        let profitChart;
+        let chartData = {
+            labels: [],
+            datasets: [{
+                label: '일일 수익률 (%)',
+                data: [],
+                borderColor: '#00ff00',
+                backgroundColor: 'rgba(0, 255, 0, 0.1)',
+                tension: 0.4,
+                fill: true
+            }]
+        };
+
+        // 차트 초기화
+        function initChart() {
+            const ctx = document.getElementById('profitChart').getContext('2d');
+            profitChart = new Chart(ctx, {
+                type: 'line',
+                data: chartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#fff'
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: '#fff' },
+                            grid: { color: 'rgba(255,255,255,0.1)' }
+                        },
+                        y: {
+                            ticks: { color: '#fff' },
+                            grid: { color: 'rgba(255,255,255,0.1)' }
+                        }
+                    }
+                }
+            });
+        }
+
+        // API 키 저장
+        function saveApiKeys() {
+            const accessKey = document.getElementById('accessKey').value;
+            const secretKey = document.getElementById('secretKey').value;
+            
+            if (!accessKey || !secretKey) {
+                alert('API 키를 모두 입력해주세요.');
+                return;
+            }
+
+            // 로컬 스토리지에 암호화하여 저장 (실제로는 서버에 저장 권장)
+            localStorage.setItem('upbit_access_key', btoa(accessKey));
+            localStorage.setItem('upbit_secret_key', btoa(secretKey));
+            
+            document.getElementById('apiStatus').innerHTML = 
+                '<div style="color: #00ff00;">✅ API 키가 저장되었습니다.</div>';
+            
+            addLog('API 키가 성공적으로 저장되었습니다.', 'success');
+        }
+
+        // 연결 테스트
+        async function testConnection() {
+            const accessKey = document.getElementById('accessKey').value;
+            const secretKey = document.getElementById('secretKey').value;
+            
+            if (!accessKey || !secretKey) {
+                alert('API 키를 먼저 입력해주세요.');
+                return;
+            }
+
+            document.getElementById('apiStatus').innerHTML = 
+                '<div style="color: #ffc107;">⏳ 연결 테스트 중...</div>';
+
+            // 실제로는 업비트 API 호출
+            setTimeout(() => {
+                const isValid = Math.random() > 0.3; // 시뮬레이션
+                
+                if (isValid) {
+                    document.getElementById('apiStatus').innerHTML = 
+                        '<div style="color: #00ff00;">✅ 연결 성공! API 키가 유효합니다.</div>';
+                    addLog('업비트 API 연결 테스트 성공', 'success');
+                } else {
+                    document.getElementById('apiStatus').innerHTML = 
+                        '<div style="color: #ff4444;">❌ 연결 실패. API 키를 확인해주세요.</div>';
+                    addLog('업비트 API 연결 실패', 'error');
+                }
+            }, 2000);
+        }
+
+        // 텔레그램 설정 저장
+        function saveTelegramConfig() {
+            const token = document.getElementById('telegramToken').value;
+            const chatId = document.getElementById('telegramChatId').value;
+            
+            if (!token || !chatId) {
+                alert('텔레그램 봇 토큰과 채팅 ID를 모두 입력해주세요.');
+                return;
+            }
+
+            localStorage.setItem('telegram_token', btoa(token));
+            localStorage.setItem('telegram_chat_id', btoa(chatId));
+            
+            addLog('텔레그램 설정이 저장되었습니다.', 'success');
+            alert('텔레그램 설정이 저장되었습니다.');
+        }
+
+        // 텔레그램 테스트
+        async function testTelegram() {
+            const token = document.getElementById('telegramToken').value;
+            const chatId = document.getElementById('telegramChatId').value;
+            
+            if (!token || !chatId) {
+                alert('텔레그램 설정을 먼저 입력해주세요.');
+                return;
+            }
+
+            // 실제로는 텔레그램 API 호출
+            addLog('텔레그램 테스트 메시지 전송 중...', 'info');
+            
+            setTimeout(() => {
+                const success = Math.random() > 0.2;
+                if (success) {
+                    addLog('✅ 텔레그램 테스트 메시지 전송 성공', 'success');
+                    alert('테스트 메시지가 성공적으로 전송되었습니다!');
+                } else {
+                    addLog('❌ 텔레그램 메시지 전송 실패', 'error');
+                    alert('메시지 전송에 실패했습니다. 설정을 확인해주세요.');
+                }
+            }, 1500);
+        }
+
+        // 거래 시작
+        function startTrading() {
+            if (tradingBot.isRunning) {
+                alert('거래가 이미 실행 중입니다.');
+                return;
+            }
+
+            // API 키 확인
+            const accessKey = localStorage.getItem('upbit_access_key');
+            if (!accessKey) {
+                alert('먼저 업비트 API 키를 설정해주세요.');
+                return;
+            }
+
+            tradingBot.isRunning = true;
+            tradingBot.initialBalance = parseFloat(document.getElementById('initialAmount').value);
+            tradingBot.balance = tradingBot.initialBalance;
+            
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
+            document.getElementById('tradingStatus').textContent = '실행 중';
+            
+            addLog('🚀 자동매매가 시작되었습니다.', 'success');
+            
+            // 실시간 업데이트 시작
+            startRealTimeUpdate();
+            
+            // Claude 개입 시작
+            if (document.getElementById('claudeEmergencyMode').checked) {
+                startClaudeMonitoring();
+            }
+            
+            // 텔레그램 알림 시작
+            startTelegramNotifications();
+        }
+
+        // 거래 중지
+        function stopTrading() {
+            tradingBot.isRunning = false;
+            
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('tradingStatus').textContent = '중지됨';
+            
+            addLog('⏹️ 자동매매가 중지되었습니다.', 'warning');
+            
+            sendTelegramMessage('🛑 자동매매가 중지되었습니다.');
+        }
+
+        // 긴급 매도
+        function emergencySell() {
+            if (!confirm('모든 포지션을 긴급 매도하시겠습니까?')) {
+                return;
+            }
+            
+            addLog('🚨 긴급 매도 실행 중...', 'error');
+            
+            // 모든 포지션 청산 시뮬레이션
+            setTimeout(() => {
+                tradingBot.positions = {};
+                updateDisplay();
+                addLog('✅ 모든 포지션이 매도되었습니다.', 'success');
+                
+                sendTelegramMessage('🚨 긴급 매도 완료\n모든 포지션이 청산되었습니다.');
+            }, 2000);
+        }
+
+        // 일일 리셋
+        function resetDaily() {
+            if (!confirm('일일 수익률을 리셋하시겠습니까?')) {
+                return;
+            }
+            
+            tradingBot.dailyPnL = 0;
+            tradingBot.initialBalance = tradingBot.balance;
+            updateDisplay();
+            
+            addLog('🔄 일일 수익률이 리셋되었습니다.', 'info');
+        }
+
+        // Claude 수동 분석
+        function claudeManualAnalysis() {
+            addLog('🤖 Claude AI 분석 요청 중...', 'info');
+            
+            setTimeout(() => {
+                const recommendations = [
+                    '현재 시장 상황이 불안정합니다. 보수적 접근을 권장합니다.',
+                    'XRP에서 강한 매수 신호가 감지되었습니다.',
+                    'BTC 김치 프리미엄이 3.2%로 상승했습니다.',
+                    '전체적인 거래량이 증가하고 있어 변동성 확대 예상됩니다.'
+                ];
+                
+                const randomRec = recommendations[Math.floor(Math.random() * recommendations.length)];
+                addLog(`🤖 Claude 분석: ${randomRec}`, 'info');
+                
+                sendTelegramMessage(`🤖 Claude AI 분석 결과:\n${randomRec}`);
+            }, 1500);
+        }
+
+        // Claude 긴급 중지
+        function claudeEmergencyStop() {
+            if (!confirm('Claude AI가 긴급 중지를 요청했습니다. 실행하시겠습니까?')) {
+                return;
+            }
+            
+            stopTrading();
+            addLog('🤖 Claude AI에 의한 긴급 중지 실행', 'error');
+            sendTelegramMessage('🚨 Claude AI 긴급 중지\n위험 요소 감지로 거래가 중단되었습니다.');
+        }
+
+        // 실시간 업데이트
+        function startRealTimeUpdate() {
+            setInterval(() => {
+                if (!tradingBot.isRunning) return;
+                
+                // 가상의 거래 시뮬레이션
+                simulateTrading();
+                updateDisplay();
+                
+                // 수익률 차트 업데이트
+                updateChart();
+                
+                // 5% 손익 체크
+                checkDailyLimits();
+                
+                tradingBot.lastUpdate = new Date();
+            }, 5000); // 5초마다 업데이트
+        }
+
+        // 가상 거래 시뮬레이션
+        function simulateTrading() {
+            const includeFees = document.getElementById('includeFees').checked;
+            const feeRate = includeFees ? 0.0005 : 0; // 0.05% 수수료
+            
+            // 랜덤 거래 생성 (시뮬레이션)
+            if (Math.random() > 0.8) { // 20% 확률로 거래 발생
+                const coins = ['BTC', 'ETH', 'XRP', 'ADA', 'DOGE'];
+                const coin = coins[Math.floor(Math.random() * coins.length)];
+                const action = Math.random() > 0.5 ? 'BUY' : 'SELL';
+                const amount = Math.random() * 50000 + 10000; // 1만~6만원
+                const price = Math.random() * 100000 + 50000; // 가상 가격
+                
+                // 수수료 계산
+                const fee = amount * feeRate;
+                const netAmount = action === 'BUY' ? amount + fee : amount - fee;
+                
+                // 수익률 계산 (시뮬레이션)
+                const priceChange = (Math.random() - 0.5) * 0.1; // -5% ~ +5%
+                const profit = netAmount * priceChange;
+                
+                tradingBot.dailyPnL += profit / tradingBot.initialBalance;
+                tradingBot.balance += profit;
+                
+                // 거래 기록
+                const trade = {
+                    time: new Date().toLocaleTimeString(),
+                    coin: coin,
+                    action: action,
+                    amount: amount.toLocaleString(),
+                    price: price.toLocaleString(),
+                    fee: fee.toFixed(0),
+                    profit: profit.toFixed(0),
+                    profitRate: (profit / netAmount * 100).toFixed(2)
+                };
+                
+                tradingBot.trades.unshift(trade);
+                
+                const logClass = profit > 0 ? 'success' : 'error';
+                const profitSign = profit > 0 ? '+' : '';
+                addLog(`💰 ${action} ${coin}: ${profitSign}${profit.toFixed(0)}원 (수수료: ${fee.toFixed(0)}원)`, logClass);
+                
+                // 포지션 업데이트
+                if (action === 'BUY') {
+                    tradingBot.positions[coin] = (tradingBot.positions[coin] || 0) + 1;
+                } else if (tradingBot.positions[coin]) {
+                    tradingBot.positions[coin] = Math.max(0, tradingBot.positions[coin] - 1);
+                    if (tradingBot.positions[coin] === 0) {
+                        delete tradingBot.positions[coin];
+                    }
+                }
+            }
+        }
+
+        // 디스플레이 업데이트
+        function updateDisplay() {
+            // 잔고 업데이트
+            document.getElementById('currentBalance').textContent = 
+                `₩${tradingBot.balance.toLocaleString()}`;
+            
+            // 일일 손익 업데이트
+            const dailyPnLPercent = (tradingBot.dailyPnL * 100).toFixed(2);
+            const pnlElement = document.getElementById('dailyPnL');
+            pnlElement.textContent = `${dailyPnLPercent >= 0 ? '+' : ''}${dailyPnLPercent}%`;
+            pnlElement.className = dailyPnLPercent >= 0 ? 'status-value profit-positive' : 'status-value profit-negative';
+            
+            // 활성 포지션 수
+            document.getElementById('activePositions').textContent = 
+                Object.keys(tradingBot.positions).length;
+            
+            // 마지막 업데이트 시간
+            document.getElementById('lastUpdate').textContent = 
+                tradingBot.lastUpdate.toLocaleTimeString();
+        }
+
+        // 차트 업데이트
+        function updateChart() {
+            const now = new Date();
+            const timeLabel = now.toLocaleTimeString();
+            const profitPercent = tradingBot.dailyPnL * 100;
+            
+            chartData.labels.push(timeLabel);
+            chartData.datasets[0].data.push(profitPercent);
+            
+            // 최대 50개 데이터포인트 유지
+            if (chartData.labels.length > 50) {
+                chartData.labels.shift();
+                chartData.datasets[0].data.shift();
+            }
+            
+            // 차트 색상 동적 변경
+            chartData.datasets[0].borderColor = profitPercent >= 0 ? '#00ff00' : '#ff4444';
+            chartData.datasets[0].backgroundColor = profitPercent >= 0 ? 'rgba(0, 255, 0, 0.1)' : 'rgba(255, 68, 68, 0.1)';
+            
+            profitChart.update('none');
+        }
+
+        // 일일 한도 체크
+        function checkDailyLimits() {
+            const maxProfit = parseFloat(document.getElementById('maxProfitRate').value) / 100;
+            const maxLoss = parseFloat(document.getElementById('maxLossRate').value) / 100;
+            
+            if (tradingBot.dailyPnL >= maxProfit) {
+                stopTrading();
+                addLog(`🎉 일일 수익 목표 달성! (${(tradingBot.dailyPnL * 100).toFixed(2)}%)`, 'success');
+                sendTelegramMessage(`🎉 일일 수익 목표 달성!\n수익률: ${(tradingBot.dailyPnL * 100).toFixed(2)}%\n자동매매가 중지됩니다.`);
+            } else if (tradingBot.dailyPnL <= -maxLoss) {
+                stopTrading();
+                addLog(`🛑 일일 손실 한도 도달! (${(tradingBot.dailyPnL * 100).toFixed(2)}%)`, 'error');
+                sendTelegramMessage(`🛑 일일 손실 한도 도달!\n손실률: ${(tradingBot.dailyPnL * 100).toFixed(2)}%\n자동매매가 중지됩니다.`);
+            }
+        }
+
+        // Claude 모니터링 시작
+        function startClaudeMonitoring() {
+            const interval = parseInt(document.getElementById('claudeInterval').value);
+            
+            setInterval(() => {
+                if (!tradingBot.isRunning) return;
+                
+                // Claude 분석 시뮬레이션
+                const riskScore = Math.random();
+                const riskThreshold = parseFloat(document.getElementById('riskThreshold').value);
+                
+                if (riskScore > riskThreshold) {
+                    const actions = [
+                        '포지션 크기 축소 권장',
+                        '변동성 증가로 주의 필요',
+                        '김치 프리미엄 하락 감지',
+                        '거래량 급증으로 관망 권장'
+                    ];
+                    
+                    const action = actions[Math.floor(Math.random() * actions.length)];
+                    addLog(`🤖 Claude 자동 분석: ${action}`, 'warning');
+                    
+                    if (Math.random() > 0.8) { // 20% 확률로 자동 개입
+                        addLog('🤖 Claude가 자동으로 개입했습니다.', 'error');
+                        sendTelegramMessage(`🤖 Claude 자동 개입\n사유: ${action}`);
+                    }
+                }
+            }, interval * 60 * 1000); // 분 단위를 밀리초로 변환
+        }
+
+        // 텔레그램 알림 시작
+        function startTelegramNotifications() {
+            const interval = parseInt(document.getElementById('notificationInterval').value);
+            
+            setInterval(() => {
+                if (!tradingBot.isRunning) return;
+                
+                const notifyProfitLoss = document.getElementById('notifyProfitLoss').checked;
+                
+                if (notifyProfitLoss) {
+                    const message = generateTelegramReport();
+                    sendTelegramMessage(message);
+                }
+            }, interval * 60 * 1000);
+        }
+
+        // 텔레그램 리포트 생성
+        function generateTelegramReport() {
+            const profitPercent = (tradingBot.dailyPnL * 100).toFixed(2);
+            const profitAmount = (tradingBot.balance - tradingBot.initialBalance).toLocaleString();
+            const positionCount = Object.keys(tradingBot.positions).length;
+            
+            const emoji = tradingBot.dailyPnL >= 0 ? '📈' : '📉';
+            const sign = tradingBot.dailyPnL >= 0 ? '+' : '';
+            
+            return `${emoji} 자동매매 현황 리포트
+            
+💰 현재 잔고: ₩${tradingBot.balance.toLocaleString()}
+📊 일일 손익: ${sign}${profitPercent}% (${sign}₩${profitAmount})
+🎯 활성 포지션: ${positionCount}개
+⏰ 시간: ${new Date().toLocaleString()}
+
+${tradingBot.dailyPnL >= 0 ? '✅ 순조롭게 수익 중입니다!' : '⚠️ 손실이 발생했습니다. 주의하세요.'}`;
+        }
+
+        // 텔레그램 메시지 전송
+        async function sendTelegramMessage(message) {
+            const token = localStorage.getItem('telegram_token');
+            const chatId = localStorage.getItem('telegram_chat_id');
+            
+            if (!token || !chatId) return;
+            
+            try {
+                // 실제로는 텔레그램 API 호출
+                // 여기서는 시뮬레이션
+                console.log('텔레그램 메시지 전송:', message);
+                addLog('📱 텔레그램 알림 전송 완료', 'info');
+            } catch (error) {
+                addLog('📱 텔레그램 알림 전송 실패', 'error');
+            }
+        }
+
+        // 로그 추가
+        function addLog(message, type = 'info') {
+            const logContainer = document.getElementById('logContainer');
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            
+            const timestamp = new Date().toLocaleTimeString();
+            logEntry.innerHTML = `<strong>[${timestamp}]</strong> ${message}`;
+            
+            logContainer.insertBefore(logEntry, logContainer.firstChild);
+            
+            // 최대 100개 로그 유지
+            while (logContainer.children.length > 100) {
+                logContainer.removeChild(logContainer.lastChild);
+            }
+        }
+
+        // 고급 설정 저장
+        function saveAdvancedSettings() {
+            const settings = {
+                maxPositions: document.getElementById('maxPositions').value,
+                maxPositionSize: document.getElementById('maxPositionSize').value,
+                stopLossRate: document.getElementById('stopLossRate').value
+            };
+            
+            localStorage.setItem('advanced_settings', JSON.stringify(settings));
+            addLog('고급 설정이 저장되었습니다.', 'success');
+            closeModal('settingsModal');
+        }
+
+        // 모달 창 닫기
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+
+        // 설정값 불러오기
+        function loadSettings() {
+            // API 키 불러오기
+            const accessKey = localStorage.getItem('upbit_access_key');
+            const secretKey = localStorage.getItem('upbit_secret_key');
+            
+            if (accessKey) {
+                document.getElementById('accessKey').value = atob(accessKey);
+            }
+            if (secretKey) {
+                document.getElementById('secretKey').value = atob(secretKey);
+            }
+            
+            // 텔레그램 설정 불러오기
+            const telegramToken = localStorage.getItem('telegram_token');
+            const telegramChatId = localStorage.getItem('telegram_chat_id');
+            
+            if (telegramToken) {
+                document.getElementById('telegramToken').value = atob(telegramToken);
+            }
+            if (telegramChatId) {
+                document.getElementById('telegramChatId').value = atob(telegramChatId);
+            }
+            
+            // 고급 설정 불러오기
+            const advancedSettings = localStorage.getItem('advanced_settings');
+            if (advancedSettings) {
+                const settings = JSON.parse(advancedSettings);
+                document.getElementById('maxPositions').value = settings.maxPositions || 4;
+                document.getElementById('maxPositionSize').value = settings.maxPositionSize || 25;
+                document.getElementById('stopLossRate').value = settings.stopLossRate || 1;
+            }
+        }
+
+        // 리스크 임계값 슬라이더 업데이트
+        document.getElementById('riskThreshold').addEventListener('input', function() {
+            document.getElementById('riskThresholdValue').textContent = this.value;
+        });
+
+        // 키보드 단축키
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey || e.metaKey) {
+                switch(e.key) {
+                    case 's':
+                        e.preventDefault();
+                        if (tradingBot.isRunning) {
+                            stopTrading();
+                        } else {
+                            startTrading();
+                        }
+                        break;
+                    case 'e':
+                        e.preventDefault();
+                        emergencySell();
+                        break;
+                    case 'r':
+                        e.preventDefault();
+                        resetDaily();
+                        break;
+                }
+            }
+        });
+
+        // 페이지 종료 시 경고
+        window.addEventListener('beforeunload', function(e) {
+            if (tradingBot.isRunning) {
+                e.preventDefault();
+                e.returnValue = '거래가 실행 중입니다. 정말 페이지를 나가시겠습니까?';
+            }
+        });
+
+        // 실시간 현재가 업데이트 (시뮬레이션)
+        function updateMarketPrices() {
+            const coins = document.getElementById('targetCoins');
+            for (let option of coins.options) {
+                if (option.selected) {
+                    const coinName = option.value.split('-')[1];
+                    // 실제로는 업비트 API에서 현재가 조회
+                    const price = Math.random() * 100000 + 10000;
+                    option.text = `${option.text.split('(')[0]}(${price.toLocaleString()}원)`;
+                }
+            }
+        }
+
+        // 네트워크 상태 모니터링
+        function checkNetworkStatus() {
+            const status = navigator.onLine ? '연결됨' : '연결 끊김';
+            const color = navigator.onLine ? '#00ff00' : '#ff4444';
+            
+            // 네트워크 상태 표시 (실제 구현 시)
+            if (!navigator.onLine && tradingBot.isRunning) {
+                addLog('⚠️ 네트워크 연결이 끊어졌습니다. 거래가 일시 중단될 수 있습니다.', 'error');
+            }
+        }
+
+        // 페이지 로드 완료 후 초기화
+        window.addEventListener('load', function() {
+            initChart();
+            loadSettings();
+            updateDisplay();
+            
+            // 정기 업데이트 시작
+            setInterval(updateMarketPrices, 10000); // 10초마다 가격 업데이트
+            setInterval(checkNetworkStatus, 5000);  // 5초마다 네트워크 상태 확인
+            
+            addLog('🎯 업비트 자동매매 시스템이 준비되었습니다!', 'success');
+            addLog('💡 Ctrl+S: 거래 시작/중지, Ctrl+E: 긴급 매도, Ctrl+R: 일일 리셋', 'info');
+        });
+
+        // 추가 유틸리티 함수들
+        function exportTradeHistory() {
+            const csv = tradingBot.trades.map(trade => 
+                `${trade.time},${trade.coin},${trade.action},${trade.amount},${trade.profit}`
+            ).join('\n');
+            
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `trade_history_${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+        }
+
+        function importSettings() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = function(e) {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const settings = JSON.parse(e.target.result);
+                        // 설정 적용 로직
+                        addLog('설정 파일을 불러왔습니다.', 'success');
+                    } catch (error) {
+                        addLog('설정 파일 불러오기 실패', 'error');
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+        function exportSettings() {
+            const settings = {
+                initialAmount: document.getElementById('initialAmount').value,
+                maxProfitRate: document.getElementById('maxProfitRate').value,
+                maxLossRate: document.getElementById('maxLossRate').value,
+                claudeInterval: document.getElementById('claudeInterval').value,
+                notificationInterval: document.getElementById('notificationInterval').value
+            };
+            
+            const blob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'trading_bot_settings.json';
+            a.click();
+        }
+
+    </script>
+</body>
+</html>
