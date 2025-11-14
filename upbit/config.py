@@ -4,9 +4,21 @@
 개선된 설정 관리 모듈
 """
 
+import os
 from dataclasses import dataclass
 from typing import List
 from datetime import datetime
+from pathlib import Path
+
+# .env 파일 로드
+try:
+    from dotenv import load_dotenv
+    # 프로젝트 루트 디렉토리에서 .env 파일 찾기
+    env_path = Path(__file__).parent.parent / '.env'
+    load_dotenv(dotenv_path=env_path)
+except ImportError:
+    print("⚠️ python-dotenv가 설치되지 않았습니다. pip install python-dotenv를 실행하세요.")
+    print("⚠️ 임시로 key.txt 파일을 사용합니다.")
 
 @dataclass
 class TradingConfig:
@@ -233,13 +245,47 @@ class VirtualWallet:
             print(f"가상 매도 오류: {e}")
             return None
 
-# API 키 설정 (기존 유지)
+# API 키 설정 - 환경 변수 우선, 없으면 key.txt 파일 사용
 class APIConfig:
     def __init__(self):
-        # 실제 운영시에는 환경변수나 별도 파일에서 로드
-        # 보안상 더미 키로 변경 - 실제 사용시 본인 키로 교체 필요
-        self.UPBIT_ACCESS_KEY = "YOUR_UPBIT_ACCESS_KEY_HERE"
-        self.UPBIT_SECRET_KEY = "YOUR_UPBIT_SECRET_KEY_HERE"
-    
+        # 1순위: 환경 변수에서 읽기
+        self.UPBIT_ACCESS_KEY = os.getenv('UPBIT_ACCESS_KEY')
+        self.UPBIT_SECRET_KEY = os.getenv('UPBIT_SECRET_KEY')
+
+        # 2순위: key.txt 파일에서 읽기
+        if not self.UPBIT_ACCESS_KEY or not self.UPBIT_SECRET_KEY:
+            try:
+                key_file = Path(__file__).parent / 'key.txt'
+                if key_file.exists():
+                    with open(key_file, 'r') as f:
+                        lines = f.readlines()
+                        for line in lines:
+                            if 'Access key' in line:
+                                self.UPBIT_ACCESS_KEY = line.split()[-1].strip()
+                            elif 'Secret key' in line:
+                                self.UPBIT_SECRET_KEY = line.split()[-1].strip()
+                    print("✅ key.txt 파일에서 API 키를 로드했습니다.")
+                else:
+                    print("❌ 환경 변수와 key.txt 파일 모두에서 API 키를 찾을 수 없습니다!")
+                    print("   .env 파일을 생성하거나 key.txt 파일을 확인하세요.")
+            except Exception as e:
+                print(f"❌ key.txt 파일 읽기 실패: {e}")
+        else:
+            print("✅ 환경 변수에서 API 키를 로드했습니다.")
+
+        # API 키 검증
+        if not self.UPBIT_ACCESS_KEY or not self.UPBIT_SECRET_KEY:
+            raise ValueError(
+                "API 키가 설정되지 않았습니다!\n"
+                "1. .env 파일에 UPBIT_ACCESS_KEY와 UPBIT_SECRET_KEY를 설정하거나\n"
+                "2. upbit/key.txt 파일을 확인하세요."
+            )
+
+        # 보안: 키 일부만 표시
+        access_masked = self.UPBIT_ACCESS_KEY[:8] + "..." + self.UPBIT_ACCESS_KEY[-4:] if len(self.UPBIT_ACCESS_KEY) > 12 else "***"
+        secret_masked = self.UPBIT_SECRET_KEY[:8] + "..." + self.UPBIT_SECRET_KEY[-4:] if len(self.UPBIT_SECRET_KEY) > 12 else "***"
+        print(f"🔑 Access Key: {access_masked}")
+        print(f"🔑 Secret Key: {secret_masked}")
+
     def get_upbit_keys(self):
         return self.UPBIT_ACCESS_KEY, self.UPBIT_SECRET_KEY

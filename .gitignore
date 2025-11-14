@@ -1,0 +1,60 @@
+# Environment variables
+.env
+
+# API Keys
+upbit/key.txt
+upbit/key - 복사본.txt
+
+# Database
+*.db
+*.db-journal
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# Logs
+*.log
+trading_bot.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Charts and reports
+*.png
+*.pdf
+
+# Temporary files
+*.tmp
+*.bak
