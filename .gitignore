@@ -5,6 +5,9 @@
 upbit/key.txt
 upbit/key - 복사본.txt
 
+# User Configuration
+upbit/user_config.json
+
 # Database
 *.db
 *.db-journal
