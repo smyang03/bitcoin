@@ -653,6 +653,19 @@
             <canvas id="profitChart"></canvas>
         </div>
 
+        <!-- 선택된 코인 실시간 모니터 -->
+        <div class="panel" style="grid-column: span 2;">
+            <h2>👁️ 선택된 코인 실시간 모니터</h2>
+            <div id="selectedCoinsMonitor">
+                <div id="noSelectedCoins" style="text-align: center; padding: 40px; color: #ccc;">
+                    코인을 선택하면 여기에 실시간 정보가 표시됩니다
+                </div>
+                <div id="selectedCoinsGrid" style="display: none; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px;">
+                    <!-- 선택된 코인들의 카드가 여기에 표시 -->
+                </div>
+            </div>
+        </div>
+
         <!-- 상세 포지션 현황 -->
         <div class="panel" style="grid-column: span 2;">
             <h2>💼 상세 포지션 현황</h2>
@@ -1364,20 +1377,132 @@
         function updateSelectedCoins() {
             const selected = Array.from(document.querySelectorAll('input[id^="coin_"]:checked'))
                                  .map(cb => cb.value);
-            
+
             document.getElementById('selectedCount').textContent = selected.length;
-            
+
             if (selected.length > 0) {
                 document.getElementById('selectedSummary').style.display = 'block';
-                
+
                 const coinTags = selected.map(market => {
                     const coinName = market.replace('KRW-', '');
                     return `<span style="background: #007bff; padding: 4px 8px; border-radius: 4px; font-size: 0.9rem;">${coinName}</span>`;
                 }).join('');
-                
+
                 document.getElementById('selectedCoins').innerHTML = coinTags;
             } else {
                 document.getElementById('selectedSummary').style.display = 'none';
+            }
+
+            // 선택된 코인 모니터 업데이트
+            updateSelectedCoinsMonitor();
+        }
+
+        // 선택된 코인 실시간 모니터 업데이트
+        async function updateSelectedCoinsMonitor() {
+            const selected = Array.from(document.querySelectorAll('input[id^="coin_"]:checked'))
+                                 .map(cb => cb.value);
+
+            const noSelectedCoins = document.getElementById('noSelectedCoins');
+            const selectedCoinsGrid = document.getElementById('selectedCoinsGrid');
+
+            if (selected.length === 0) {
+                noSelectedCoins.style.display = 'block';
+                selectedCoinsGrid.style.display = 'none';
+                return;
+            }
+
+            noSelectedCoins.style.display = 'none';
+            selectedCoinsGrid.style.display = 'grid';
+
+            try {
+                // 선택된 코인들의 실시간 가격 조회
+                const symbols = selected.join(',');
+                const response = await fetch(`https://api.upbit.com/v1/ticker?markets=${symbols}`);
+                const tickers = await response.json();
+
+                selectedCoinsGrid.innerHTML = tickers.map(ticker => {
+                    const coin = upbitCoins.find(c => c.market === ticker.market);
+                    const analysis = coinAnalysis[ticker.market] || {};
+                    const marketData = analysis.marketData || {};
+                    const indicators = analysis.indicators || {};
+
+                    const changeColor = ticker.change === 'RISE' ? '#00ff00' :
+                                       ticker.change === 'FALL' ? '#ff4444' : '#ccc';
+                    const changeSign = ticker.change === 'RISE' ? '+' :
+                                      ticker.change === 'FALL' ? '-' : '';
+
+                    const coinName = ticker.market.replace('KRW-', '');
+                    const koreanName = coin ? coin.korean_name : '';
+
+                    return `
+                        <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <div>
+                                    <div style="font-size: 1.2rem; font-weight: bold;">${coinName}</div>
+                                    <div style="font-size: 0.8rem; color: #ccc;">${koreanName}</div>
+                                </div>
+                                <div style="text-align: right;">
+                                    <div style="font-size: 1.3rem; font-weight: bold;">₩${ticker.trade_price.toLocaleString()}</div>
+                                    <div style="color: ${changeColor}; font-weight: bold;">
+                                        ${changeSign}${(Math.abs(ticker.change_rate) * 100).toFixed(2)}%
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.85rem;">
+                                <div>
+                                    <div style="color: #ccc;">고가</div>
+                                    <div style="color: #ff4444;">₩${ticker.high_price.toLocaleString()}</div>
+                                </div>
+                                <div>
+                                    <div style="color: #ccc;">저가</div>
+                                    <div style="color: #4444ff;">₩${ticker.low_price.toLocaleString()}</div>
+                                </div>
+                                <div>
+                                    <div style="color: #ccc;">거래량</div>
+                                    <div>₩${Math.round(ticker.acc_trade_price_24h / 1000000).toLocaleString()}M</div>
+                                </div>
+                                <div>
+                                    <div style="color: #ccc;">거래대금</div>
+                                    <div>${ticker.acc_trade_volume_24h.toFixed(2)}</div>
+                                </div>
+                            </div>
+
+                            ${indicators.rsi ? `
+                            <div style="margin-top: 10px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 5px; font-size: 0.85rem;">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                    <span>RSI:</span>
+                                    <span style="font-weight: bold; color: ${
+                                        indicators.rsi < 30 ? '#00ff00' :
+                                        indicators.rsi > 70 ? '#ff4444' : '#ccc'
+                                    }">${indicators.rsi.toFixed(1)}</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                    <span>추세:</span>
+                                    <span style="font-weight: bold; color: ${
+                                        indicators.ma_trend === 'BULLISH' ? '#00ff00' :
+                                        indicators.ma_trend === 'BEARISH' ? '#ff4444' : '#ccc'
+                                    }">${indicators.ma_trend || 'NEUTRAL'}</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span>신호:</span>
+                                    <span style="font-weight: bold; color: ${
+                                        analysis.signal === 'BUY' ? '#00ff00' :
+                                        analysis.signal === 'SELL' ? '#ff4444' : '#ccc'
+                                    }">${analysis.signal || 'HOLD'}</span>
+                                </div>
+                            </div>
+                            ` : ''}
+
+                            <div style="margin-top: 10px; font-size: 0.75rem; color: #999;">
+                                마지막 업데이트: ${new Date().toLocaleTimeString()}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+            } catch (error) {
+                console.error('선택된 코인 모니터 업데이트 실패:', error);
             }
         }
 
@@ -1417,92 +1542,164 @@
         }
 
         // 포지션 현황 업데이트 함수들
-        function updatePositionDisplay() {
+        async function updatePositionDisplay() {
             const positions = tradingBot.positions;
             const positionCount = Object.keys(positions).length;
-            
+
             if (positionCount === 0) {
                 document.getElementById('noPositions').style.display = 'block';
                 document.getElementById('positionTable').style.display = 'none';
                 document.getElementById('positionSummary').style.display = 'none';
                 return;
             }
-            
+
             document.getElementById('noPositions').style.display = 'none';
             document.getElementById('positionTable').style.display = 'block';
             document.getElementById('positionSummary').style.display = 'block';
-            
-            updatePositionTable(positions);
-            updatePositionSummary(positions);
+
+            await updatePositionTable(positions);
+            await updatePositionSummary(positions);
         }
 
-        function updatePositionTable(positions) {
+        async function updatePositionTable(positions) {
             const tbody = document.getElementById('positionTableBody');
             tbody.innerHTML = '';
-            
+
+            // 실시간 가격 정보 가져오기
+            const symbols = Object.keys(positions).join(',');
+            let currentPrices = {};
+
+            try {
+                if (symbols) {
+                    const response = await fetch(`https://api.upbit.com/v1/ticker?markets=${symbols}`);
+                    const tickers = await response.json();
+                    tickers.forEach(ticker => {
+                        currentPrices[ticker.market] = {
+                            price: ticker.trade_price,
+                            change: ticker.change,
+                            change_rate: ticker.change_rate
+                        };
+                    });
+                }
+            } catch (error) {
+                console.error('실시간 가격 조회 실패:', error);
+                // 실패시 시뮬레이션 가격 사용
+                for (const symbol of Object.keys(positions)) {
+                    const position = positions[symbol];
+                    currentPrices[symbol] = {
+                        price: position.avgPrice * (0.95 + Math.random() * 0.1),
+                        change: 'EVEN',
+                        change_rate: 0
+                    };
+                }
+            }
+
             let totalInvested = 0, totalValue = 0;
-            
+
             for (const [symbol, position] of Object.entries(positions)) {
                 const row = document.createElement('tr');
-                
-                // 시뮬레이션용 현재가 (실제로는 API에서 가져옴)
-                const currentPrice = position.avgPrice * (0.95 + Math.random() * 0.1);
+
+                const priceInfo = currentPrices[symbol] || {
+                    price: position.avgPrice,
+                    change: 'EVEN',
+                    change_rate: 0
+                };
+                const currentPrice = priceInfo.price;
                 const quantity = position.quantity || 0;
                 const avgPrice = position.avgPrice || 0;
                 const invested = position.totalInvested || 0;
                 const currentValue = quantity * currentPrice;
                 const pnl = currentValue - invested;
                 const pnlRate = invested > 0 ? (pnl / invested) * 100 : 0;
-                
+
                 totalInvested += invested;
                 totalValue += currentValue;
-                
+
                 const pnlColor = pnl >= 0 ? '#00ff00' : '#ff4444';
+                const changeColor = priceInfo.change === 'RISE' ? '#00ff00' :
+                                   priceInfo.change === 'FALL' ? '#ff4444' : '#ccc';
                 const coinName = symbol.replace('KRW-', '');
-                
+
+                // 매수 이후 경과 시간
+                const entryTime = position.entryTime ? new Date(position.entryTime) : new Date();
+                const holdingTime = Math.floor((new Date() - entryTime) / 1000 / 60); // 분 단위
+
                 row.innerHTML = `
-                    <td style="padding: 8px; border: 1px solid rgba(255,255,255,0.2); font-weight: bold;">${coinName}</td>
-                    <td style="padding: 8px; border: 1px solid rgba(255,255,255,0.2);">${quantity.toFixed(8)}</td>
-                    <td style="padding: 8px; border: 1px solid rgba(255,255,255,0.2);">₩${avgPrice.toLocaleString()}</td>
-                    <td style="padding: 8px; border: 1px solid rgba(255,255,255,0.2);">₩${currentPrice.toLocaleString()}</td>
-                    <td style="padding: 8px; border: 1px solid rgba(255,255,255,0.2);">₩${invested.toLocaleString()}</td>
-                    <td style="padding: 8px; border: 1px solid rgba(255,255,255,0.2);">₩${currentValue.toLocaleString()}</td>
-                    <td style="padding: 8px; border: 1px solid rgba(255,255,255,0.2); color: ${pnlColor};">₩${pnl.toLocaleString()}</td>
-                    <td style="padding: 8px; border: 1px solid rgba(255,255,255,0.2); color: ${pnlColor}; font-weight: bold;">${pnlRate.toFixed(2)}%</td>
                     <td style="padding: 8px; border: 1px solid rgba(255,255,255,0.2);">
-                        <button class="btn" style="padding: 4px 8px; font-size: 0.8rem;" onclick="sellPosition('${symbol}')">매도</button>
+                        <div style="font-weight: bold; font-size: 1.1rem;">${coinName}</div>
+                        <div style="font-size: 0.75rem; color: #999;">보유 ${holdingTime}분</div>
+                    </td>
+                    <td style="padding: 8px; border: 1px solid rgba(255,255,255,0.2);">${quantity.toFixed(8)}</td>
+                    <td style="padding: 8px; border: 1px solid rgba(255,255,255,0.2);">
+                        <div>₩${avgPrice.toLocaleString()}</div>
+                    </td>
+                    <td style="padding: 8px; border: 1px solid rgba(255,255,255,0.2);">
+                        <div style="font-weight: bold;">₩${currentPrice.toLocaleString()}</div>
+                        <div style="color: ${changeColor}; font-size: 0.85rem;">
+                            ${priceInfo.change === 'RISE' ? '▲' : priceInfo.change === 'FALL' ? '▼' : '━'}
+                            ${(Math.abs(priceInfo.change_rate) * 100).toFixed(2)}%
+                        </div>
+                    </td>
+                    <td style="padding: 8px; border: 1px solid rgba(255,255,255,0.2);">₩${invested.toLocaleString()}</td>
+                    <td style="padding: 8px; border: 1px solid rgba(255,255,255,0.2);">
+                        <div style="font-weight: bold;">₩${Math.round(currentValue).toLocaleString()}</div>
+                    </td>
+                    <td style="padding: 8px; border: 1px solid rgba(255,255,255,0.2); color: ${pnlColor}; font-weight: bold;">
+                        <div>₩${Math.round(pnl).toLocaleString()}</div>
+                    </td>
+                    <td style="padding: 8px; border: 1px solid rgba(255,255,255,0.2); color: ${pnlColor}; font-weight: bold; font-size: 1.1rem;">
+                        ${pnlRate >= 0 ? '+' : ''}${pnlRate.toFixed(2)}%
+                    </td>
+                    <td style="padding: 8px; border: 1px solid rgba(255,255,255,0.2);">
+                        <button class="btn btn-danger" style="padding: 6px 12px; font-size: 0.85rem; width: 100%;" onclick="sellPosition('${symbol}')">매도</button>
                     </td>
                 `;
-                
+
                 tbody.appendChild(row);
             }
         }
 
-        function updatePositionSummary(positions) {
+        async function updatePositionSummary(positions) {
+            // 실시간 가격 정보 가져오기
+            const symbols = Object.keys(positions).join(',');
+            let currentPrices = {};
+
+            try {
+                if (symbols) {
+                    const response = await fetch(`https://api.upbit.com/v1/ticker?markets=${symbols}`);
+                    const tickers = await response.json();
+                    tickers.forEach(ticker => {
+                        currentPrices[ticker.market] = ticker.trade_price;
+                    });
+                }
+            } catch (error) {
+                console.error('실시간 가격 조회 실패:', error);
+            }
+
             let totalInvested = 0, totalValue = 0;
-            
+
             for (const [symbol, position] of Object.entries(positions)) {
-                const currentPrice = position.avgPrice * (0.95 + Math.random() * 0.1);
+                const currentPrice = currentPrices[symbol] || position.avgPrice;
                 const quantity = position.quantity || 0;
                 const invested = position.totalInvested || 0;
                 const currentValue = quantity * currentPrice;
-                
+
                 totalInvested += invested;
                 totalValue += currentValue;
             }
-            
+
             const totalPnL = totalValue - totalInvested;
             const totalPnLRate = totalInvested > 0 ? (totalPnL / totalInvested) * 100 : 0;
-            
-            document.getElementById('totalInvested').textContent = `₩${totalInvested.toLocaleString()}`;
-            document.getElementById('totalValue').textContent = `₩${totalValue.toLocaleString()}`;
-            
+
+            document.getElementById('totalInvested').textContent = `₩${Math.round(totalInvested).toLocaleString()}`;
+            document.getElementById('totalValue').textContent = `₩${Math.round(totalValue).toLocaleString()}`;
+
             const pnlElement = document.getElementById('totalPnL');
             const pnlRateElement = document.getElementById('totalPnLRate');
-            
-            pnlElement.textContent = `₩${totalPnL.toLocaleString()}`;
-            pnlRateElement.textContent = `${totalPnLRate.toFixed(2)}%`;
-            
+
+            pnlElement.textContent = `₩${Math.round(totalPnL).toLocaleString()}`;
+            pnlRateElement.textContent = `${totalPnLRate >= 0 ? '+' : ''}${totalPnLRate.toFixed(2)}%`;
+
             const color = totalPnL >= 0 ? 'profit-positive' : 'profit-negative';
             pnlElement.className = `status-value ${color}`;
             pnlRateElement.className = `status-value ${color}`;
@@ -2062,19 +2259,29 @@ ${tradingBot.dailyPnL >= 0 ? '✅ 순조롭게 수익 중입니다!' : '⚠️ �
         }, 300000); // 5분마다
 
         // 페이지 로드 완료 후 초기화
-        window.addEventListener('load', function() {
+        window.addEventListener('load', async function() {
             initChart();
             loadSettings();
             loadTradingConfig();
             updateDisplay();
             updatePositionDisplay();
-            
+
+            // 코인 목록 자동 로드
+            addLog('시스템 초기화 중...', 'info');
+            await loadUpbitCoins();
+
+            // 포지션 실시간 업데이트
             setInterval(() => {
                 updatePositionDisplay();
             }, 3000);
-            
-            addLog('🎯 업비트 자동매매 시스템이 준비되었습니다!', 'success');
-            addLog('💡 Ctrl+S: 거래 시작/중지, Ctrl+E: 긴급 매도, Ctrl+R: 일일 리셋', 'info');
+
+            // 선택된 코인 실시간 업데이트
+            setInterval(() => {
+                updateSelectedCoinsMonitor();
+            }, 5000);
+
+            addLog('✅ 업비트 자동매매 시스템이 준비되었습니다!', 'success');
+            addLog('💡 팁: 먼저 API 키를 설정하고 연결을 테스트하세요.', 'info');
         });
 
     </script>
