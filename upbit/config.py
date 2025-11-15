@@ -45,11 +45,125 @@ class TradingConfig:
     def __post_init__(self):
         if self.target_coins is None:
             self.target_coins = [
-            'KRW-BTC', 'KRW-ETH', 'KRW-XRP', 'KRW-ADA', 
+            'KRW-BTC', 'KRW-ETH', 'KRW-XRP', 'KRW-ADA',
             'KRW-DOT', 'KRW-LINK', 'KRW-AVAX', 'KRW-SOL',
             'KRW-ATOM', 'KRW-NEAR', 'KRW-SAND', 'KRW-MANA',
             'KRW-CRO', 'KRW-ALGO', 'KRW-FLOW'
-]
+        ]
+
+    def get_filtered_coins(self, verbose: bool = True) -> dict:
+        """
+        거래 대상 코인 필터링 및 상세 정보 반환
+
+        Returns:
+            {
+                'selected': [코인 목록],
+                'details': {코인: {'reason': 선택/제외 이유, 'status': 'included'/'excluded'}}
+            }
+        """
+        result = {
+            'selected': [],
+            'details': {}
+        }
+
+        # "ALL" 또는 ["ALL"] 입력 시 전체 코인 조회
+        if (isinstance(self.target_coins, str) and self.target_coins.upper() == "ALL") or \
+           (isinstance(self.target_coins, list) and len(self.target_coins) == 1 and
+            isinstance(self.target_coins[0], str) and self.target_coins[0].upper() == "ALL"):
+
+            try:
+                import pyupbit
+                all_tickers = pyupbit.get_tickers(fiat="KRW")
+
+                if verbose:
+                    print(f"\n📊 전체 KRW 마켓 코인 조회: {len(all_tickers)}개")
+
+                # 각 코인별 필터링
+                for ticker in all_tickers:
+                    include, reason = self._should_include_coin(ticker)
+
+                    result['details'][ticker] = {
+                        'status': 'included' if include else 'excluded',
+                        'reason': reason
+                    }
+
+                    if include:
+                        result['selected'].append(ticker)
+
+                if verbose:
+                    print(f"✅ 필터링 후 대상 코인: {len(result['selected'])}개")
+
+            except Exception as e:
+                if verbose:
+                    print(f"⚠️ 전체 코인 조회 실패: {e}")
+                    print("기본 코인 목록 사용")
+                # 오류 시 기본 목록 사용
+                result['selected'] = self._get_default_coins()
+                for coin in result['selected']:
+                    result['details'][coin] = {'status': 'included', 'reason': '기본 목록'}
+
+        # 특정 코인 목록 지정
+        else:
+            for coin in self.target_coins:
+                result['selected'].append(coin)
+                result['details'][coin] = {
+                    'status': 'included',
+                    'reason': '사용자 지정'
+                }
+
+            if verbose:
+                print(f"\n📊 사용자 지정 코인: {len(result['selected'])}개")
+
+        return result
+
+    def _should_include_coin(self, ticker: str) -> tuple:
+        """
+        코인을 거래 대상에 포함할지 판단
+
+        Returns:
+            (include: bool, reason: str)
+        """
+        try:
+            import pyupbit
+
+            # 1. 가격 조회
+            current_price = pyupbit.get_current_price(ticker)
+            if current_price is None:
+                return False, "가격 정보 없음"
+
+            # 2. 최소 가격 필터 (너무 저가 코인 제외)
+            if current_price < 10:
+                return False, f"가격 너무 낮음 (₩{current_price:,.0f})"
+
+            # 3. 거래량 확인 (24시간)
+            try:
+                df = pyupbit.get_ohlcv(ticker, interval="day", count=1)
+                if df is not None and not df.empty:
+                    volume_krw = df['value'].iloc[-1]  # 거래대금
+
+                    # 최소 거래대금 필터 (일 10억원 이상)
+                    min_volume = 1_000_000_000  # 10억원
+                    if volume_krw < min_volume:
+                        return False, f"거래량 부족 (₩{volume_krw/100000000:.1f}억)"
+
+                    # 적정 거래량
+                    return True, f"정상 (가격: ₩{current_price:,.0f}, 거래량: ₩{volume_krw/100000000:.1f}억)"
+                else:
+                    return False, "거래 데이터 없음"
+
+            except Exception as e:
+                return False, f"거래량 조회 실패: {str(e)[:30]}"
+
+        except Exception as e:
+            return False, f"분석 오류: {str(e)[:30]}"
+
+    def _get_default_coins(self) -> List[str]:
+        """기본 코인 목록 (전체 조회 실패 시)"""
+        return [
+            'KRW-BTC', 'KRW-ETH', 'KRW-XRP', 'KRW-ADA',
+            'KRW-SOL', 'KRW-AVAX', 'KRW-DOT', 'KRW-MATIC',
+            'KRW-LINK', 'KRW-ATOM', 'KRW-NEAR', 'KRW-ALGO'
+        ]
     def update_from_dict(self, settings: dict):
         for key, value in settings.items():
             if hasattr(self, key):
