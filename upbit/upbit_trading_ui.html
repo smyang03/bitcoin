@@ -592,11 +592,13 @@
             
             <!-- 코인 로딩 및 새로고침 -->
             <div class="form-group">
-                <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
+                <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px; flex-wrap: wrap;">
                     <button class="btn btn-primary" onclick="loadUpbitCoins()">코인 목록 새로고침</button>
                     <button class="btn btn-success" onclick="selectAllCoins()">전체 선택</button>
                     <button class="btn btn-warning" onclick="clearAllCoins()">전체 해제</button>
                     <button class="btn" style="background: linear-gradient(45deg, #667eea, #764ba2); color: white;" onclick="getAIRecommendations()">🤖 AI 추천</button>
+                    <button class="btn" style="background: rgba(102, 126, 234, 0.3); color: white; border: 1px solid #667eea;" onclick="openAISettings()">⚙️ 추천 설정</button>
+                    <button class="btn" style="background: rgba(102, 126, 234, 0.3); color: white; border: 1px solid #667eea;" onclick="showRecommendationHistory()">📋 추천 내역</button>
                     <span id="coinLoadStatus" style="color: #ccc;"></span>
                 </div>
                 
@@ -772,6 +774,101 @@
         </div>
     </div>
 
+    <!-- AI 추천 설정 모달 -->
+    <div id="aiSettingsModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('aiSettingsModal')">&times;</span>
+            <h2 style="color: #667eea;">⚙️ AI 추천 설정</h2>
+            <p style="color: #ccc; margin-bottom: 20px;">추천 기준을 조정하여 원하는 스타일의 코인을 추천받을 수 있습니다.</p>
+
+            <div class="form-group">
+                <label>최소 거래량 (억원)</label>
+                <input type="number" id="aiMinVolume" value="5" min="1" max="100" step="1">
+                <small>이 금액 이상 거래되는 코인만 추천 (기본: 5억원)</small>
+            </div>
+
+            <div class="form-group">
+                <label>추천 코인 개수</label>
+                <input type="number" id="aiRecommendCount" value="12" min="5" max="30" step="1">
+                <small>최대 몇 개의 코인을 추천받을지 설정 (기본: 12개)</small>
+            </div>
+
+            <div class="form-group">
+                <label>최소 추천 점수</label>
+                <input type="range" id="aiMinScore" min="30" max="80" value="50" step="5">
+                <span id="aiMinScoreValue">50점</span>
+                <small>이 점수 이상인 코인만 추천 (높을수록 엄격)</small>
+            </div>
+
+            <h3 style="color: #667eea; margin-top: 25px; margin-bottom: 15px;">추천 전략 선택</h3>
+
+            <div class="form-group">
+                <label>
+                    <input type="radio" name="aiStrategy" value="balanced" checked>
+                    <strong>균형형</strong> - RSI, 추세, 거래량 등을 균형있게 고려
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label>
+                    <input type="radio" name="aiStrategy" value="growth">
+                    <strong>성장형</strong> - 상승 추세와 거래량 급증을 중시
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label>
+                    <input type="radio" name="aiStrategy" value="value">
+                    <strong>가치형</strong> - 저평가(RSI 과매도) 코인 중심
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label>
+                    <input type="radio" name="aiStrategy" value="safe">
+                    <strong>안전형</strong> - 높은 유동성과 낮은 변동성 선호
+                </label>
+            </div>
+
+            <h3 style="color: #667eea; margin-top: 25px; margin-bottom: 15px;">가중치 조정 (고급)</h3>
+
+            <div class="form-group">
+                <label>RSI 가중치: <span id="rsiWeightValue">1.0</span>x</label>
+                <input type="range" id="rsiWeight" min="0" max="2" value="1.0" step="0.1">
+            </div>
+
+            <div class="form-group">
+                <label>추세 가중치: <span id="trendWeightValue">1.0</span>x</label>
+                <input type="range" id="trendWeight" min="0" max="2" value="1.0" step="0.1">
+            </div>
+
+            <div class="form-group">
+                <label>거래량 가중치: <span id="volumeWeightValue">1.0</span>x</label>
+                <input type="range" id="volumeWeight" min="0" max="2" value="1.0" step="0.1">
+            </div>
+
+            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                <button class="btn btn-success" onclick="saveAISettings()">설정 저장</button>
+                <button class="btn btn-warning" onclick="resetAISettings()">기본값으로</button>
+                <button class="btn" onclick="closeModal('aiSettingsModal')">취소</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 추천 내역 모달 -->
+    <div id="recommendationHistoryModal" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <span class="close" onclick="closeModal('recommendationHistoryModal')">&times;</span>
+            <h2 style="color: #667eea;">📋 AI 추천 내역</h2>
+            <div id="recommendationHistoryContent" style="max-height: 600px; overflow-y: auto;">
+                <div style="text-align: center; padding: 40px; color: #ccc;">
+                    아직 추천 내역이 없습니다.<br>
+                    "🤖 AI 추천" 버튼을 눌러 코인 추천을 받아보세요!
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         // 전역 변수
         let tradingBot = {
@@ -801,6 +898,20 @@
         let upbitCoins = [];
         let coinPrices = {};
         let coinAnalysis = {};
+        let recommendationHistory = [];
+
+        // AI 추천 설정
+        let aiSettings = {
+            minVolume: 500000000, // 5억원
+            recommendCount: 12,
+            minScore: 50,
+            strategy: 'balanced',
+            weights: {
+                rsi: 1.0,
+                trend: 1.0,
+                volume: 1.0
+            }
+        };
 
         // API 호출 공통 함수
         async function apiCall(endpoint, method = 'GET', data = null) {
@@ -1193,7 +1304,7 @@
                 return;
             }
 
-            addLog('🤖 AI가 시장을 분석하고 있습니다...', 'info');
+            addLog(`🤖 AI가 시장을 분석하고 있습니다... (전략: ${getStrategyName()})`, 'info');
             document.getElementById('coinLoadStatus').textContent = 'AI 분석 중...';
 
             try {
@@ -1201,63 +1312,85 @@
                 const scoredCoins = upbitCoins
                     .filter(coin => {
                         const analysis = coinAnalysis[coin.market];
-                        return analysis && coin.acc_trade_price_24h > 500000000; // 최소 거래량 필터
+                        return analysis && coin.acc_trade_price_24h > aiSettings.minVolume;
                     })
                     .map(coin => {
                         const analysis = coinAnalysis[coin.market];
                         let score = 0;
                         let reasons = [];
 
+                        // 전략에 따른 가중치 적용
+                        const strategy = aiSettings.strategy;
+                        const weights = aiSettings.weights;
+
                         // 1. RSI 기반 점수 (과매도 구간 선호)
+                        let rsiScore = 0;
                         if (analysis.indicators.rsi < 30) {
-                            score += 40;
+                            rsiScore = strategy === 'value' ? 50 : 40;
                             reasons.push('RSI 과매도');
                         } else if (analysis.indicators.rsi < 40) {
-                            score += 20;
+                            rsiScore = strategy === 'value' ? 30 : 20;
                             reasons.push('RSI 저평가');
                         } else if (analysis.indicators.rsi > 70) {
-                            score -= 30;
+                            rsiScore = strategy === 'growth' ? -10 : -30;
                             reasons.push('RSI 과매수');
                         }
+                        score += rsiScore * weights.rsi;
 
                         // 2. 이동평균 추세
+                        let trendScore = 0;
                         if (analysis.indicators.ma_trend === 'BULLISH') {
-                            score += 25;
+                            trendScore = strategy === 'growth' ? 35 : 25;
                             reasons.push('상승추세');
                         } else if (analysis.indicators.ma_trend === 'BEARISH') {
-                            score -= 15;
+                            trendScore = strategy === 'value' ? -5 : -15;
                         }
+                        score += trendScore * weights.trend;
 
                         // 3. 거래량 급증
+                        let volumeScore = 0;
                         if (analysis.marketData.volume_ratio > 2.0) {
-                            score += 30;
+                            volumeScore = strategy === 'growth' ? 40 : 30;
                             reasons.push('거래량 급증');
                         } else if (analysis.marketData.volume_ratio > 1.5) {
-                            score += 15;
+                            volumeScore = 15;
                             reasons.push('거래량 증가');
                         }
+                        score += volumeScore * weights.volume;
 
                         // 4. 변동성 (적당한 변동성 선호)
                         const volatility = analysis.marketData.volatility;
-                        if (volatility > 0.03 && volatility < 0.08) {
-                            score += 20;
-                            reasons.push('적절한 변동성');
-                        } else if (volatility > 0.15) {
-                            score -= 20;
-                            reasons.push('변동성 과다');
+                        if (strategy === 'safe') {
+                            // 안전형: 낮은 변동성 선호
+                            if (volatility < 0.05) {
+                                score += 30;
+                                reasons.push('낮은 변동성');
+                            } else if (volatility > 0.15) {
+                                score -= 30;
+                                reasons.push('변동성 과다');
+                            }
+                        } else {
+                            // 기타: 적당한 변동성 선호
+                            if (volatility > 0.03 && volatility < 0.08) {
+                                score += 20;
+                                reasons.push('적절한 변동성');
+                            } else if (volatility > 0.15) {
+                                score -= 20;
+                                reasons.push('변동성 과다');
+                            }
                         }
 
                         // 5. 24시간 변동률 (적당한 하락 후 반등 가능성)
                         if (coin.change_rate < 0 && coin.change_rate > -0.05) {
-                            score += 15;
+                            score += strategy === 'value' ? 25 : 15;
                             reasons.push('반등 가능성');
                         } else if (coin.change_rate > 0.1) {
-                            score -= 10; // 급등 후 조정 가능성
+                            score -= strategy === 'growth' ? 5 : 10;
                         }
 
                         // 6. 거래대금 (유동성)
                         if (coin.acc_trade_price_24h > 10000000000) {
-                            score += 10;
+                            score += strategy === 'safe' ? 20 : 10;
                             reasons.push('높은 유동성');
                         }
 
@@ -1276,9 +1409,9 @@
                             analysis
                         };
                     })
-                    .filter(item => item.score > 50) // 최소 점수 필터
+                    .filter(item => item.score > aiSettings.minScore) // 설정된 최소 점수 필터
                     .sort((a, b) => b.score - a.score)
-                    .slice(0, 12); // 상위 12개
+                    .slice(0, aiSettings.recommendCount); // 설정된 추천 개수
 
                 if (scoredCoins.length === 0) {
                     addLog('⚠️ 현재 시장 상황에서 추천할 만한 코인이 없습니다.', 'warning');
@@ -1306,6 +1439,24 @@
                 });
 
                 document.getElementById('coinLoadStatus').textContent = `✅ AI 추천 완료 (${scoredCoins.length}개)`;
+
+                // 추천 내역 저장
+                recommendationHistory.unshift({
+                    timestamp: new Date(),
+                    strategy: aiSettings.strategy,
+                    count: scoredCoins.length,
+                    coins: scoredCoins.map(item => ({
+                        market: item.coin.market,
+                        name: item.coin.korean_name,
+                        score: item.score,
+                        reasons: item.reasons,
+                        price: item.coin.current_price
+                    }))
+                });
+                // 최근 10개만 유지
+                if (recommendationHistory.length > 10) {
+                    recommendationHistory = recommendationHistory.slice(0, 10);
+                }
 
                 // 추천 요약 표시
                 showAIRecommendationSummary(scoredCoins);
@@ -2258,6 +2409,153 @@ ${tradingBot.dailyPnL >= 0 ? '✅ 순조롭게 수익 중입니다!' : '⚠️ �
             }
         }, 300000); // 5분마다
 
+        // AI 설정 관련 함수들
+        function getStrategyName() {
+            const strategies = {
+                'balanced': '균형형',
+                'growth': '성장형',
+                'value': '가치형',
+                'safe': '안전형'
+            };
+            return strategies[aiSettings.strategy] || '균형형';
+        }
+
+        function openAISettings() {
+            // 현재 설정 값을 모달에 반영
+            document.getElementById('aiMinVolume').value = aiSettings.minVolume / 100000000; // 억원 단위로 표시
+            document.getElementById('aiRecommendCount').value = aiSettings.recommendCount;
+            document.getElementById('aiMinScore').value = aiSettings.minScore;
+            document.getElementById('aiMinScoreValue').textContent = aiSettings.minScore + '점';
+
+            // 전략 선택
+            document.querySelectorAll('input[name="aiStrategy"]').forEach(radio => {
+                radio.checked = radio.value === aiSettings.strategy;
+            });
+
+            // 가중치 설정
+            document.getElementById('rsiWeight').value = aiSettings.weights.rsi;
+            document.getElementById('rsiWeightValue').textContent = aiSettings.weights.rsi.toFixed(1);
+            document.getElementById('trendWeight').value = aiSettings.weights.trend;
+            document.getElementById('trendWeightValue').textContent = aiSettings.weights.trend.toFixed(1);
+            document.getElementById('volumeWeight').value = aiSettings.weights.volume;
+            document.getElementById('volumeWeightValue').textContent = aiSettings.weights.volume.toFixed(1);
+
+            // 슬라이더 이벤트 리스너
+            document.getElementById('aiMinScore').oninput = function() {
+                document.getElementById('aiMinScoreValue').textContent = this.value + '점';
+            };
+            document.getElementById('rsiWeight').oninput = function() {
+                document.getElementById('rsiWeightValue').textContent = parseFloat(this.value).toFixed(1);
+            };
+            document.getElementById('trendWeight').oninput = function() {
+                document.getElementById('trendWeightValue').textContent = parseFloat(this.value).toFixed(1);
+            };
+            document.getElementById('volumeWeight').oninput = function() {
+                document.getElementById('volumeWeightValue').textContent = parseFloat(this.value).toFixed(1);
+            };
+
+            // 모달 열기
+            document.getElementById('aiSettingsModal').style.display = 'block';
+        }
+
+        function saveAISettings() {
+            // 설정 저장
+            aiSettings.minVolume = parseFloat(document.getElementById('aiMinVolume').value) * 100000000;
+            aiSettings.recommendCount = parseInt(document.getElementById('aiRecommendCount').value);
+            aiSettings.minScore = parseInt(document.getElementById('aiMinScore').value);
+            aiSettings.strategy = document.querySelector('input[name="aiStrategy"]:checked').value;
+            aiSettings.weights.rsi = parseFloat(document.getElementById('rsiWeight').value);
+            aiSettings.weights.trend = parseFloat(document.getElementById('trendWeight').value);
+            aiSettings.weights.volume = parseFloat(document.getElementById('volumeWeight').value);
+
+            // 로컬 스토리지에 저장
+            localStorage.setItem('aiSettings', JSON.stringify(aiSettings));
+
+            addLog(`⚙️ AI 추천 설정 저장됨 (전략: ${getStrategyName()})`, 'success');
+            alert('AI 추천 설정이 저장되었습니다!');
+
+            closeModal('aiSettingsModal');
+        }
+
+        function resetAISettings() {
+            if (!confirm('AI 추천 설정을 기본값으로 초기화하시겠습니까?')) return;
+
+            aiSettings = {
+                minVolume: 500000000,
+                recommendCount: 12,
+                minScore: 50,
+                strategy: 'balanced',
+                weights: {
+                    rsi: 1.0,
+                    trend: 1.0,
+                    volume: 1.0
+                }
+            };
+
+            localStorage.removeItem('aiSettings');
+            openAISettings(); // 모달 새로고침
+            addLog('⚙️ AI 추천 설정이 기본값으로 초기화되었습니다.', 'info');
+        }
+
+        function showRecommendationHistory() {
+            const content = document.getElementById('recommendationHistoryContent');
+
+            if (recommendationHistory.length === 0) {
+                content.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: #ccc;">
+                        아직 추천 내역이 없습니다.<br>
+                        "🤖 AI 추천" 버튼을 눌러 코인 추천을 받아보세요!
+                    </div>
+                `;
+            } else {
+                content.innerHTML = recommendationHistory.map((rec, index) => {
+                    const timeStr = rec.timestamp.toLocaleString();
+                    const strategyName = getStrategyName();
+
+                    return `
+                        <div style="background: rgba(255,255,255,0.05); padding: 20px; margin-bottom: 15px; border-radius: 10px; border: 1px solid rgba(102, 126, 234, 0.3);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                                <div>
+                                    <h3 style="color: #667eea; margin: 0;">추천 #${recommendationHistory.length - index}</h3>
+                                    <p style="color: #999; margin: 5px 0 0 0; font-size: 0.9rem;">${timeStr}</p>
+                                </div>
+                                <div style="text-align: right;">
+                                    <div style="background: rgba(102, 126, 234, 0.3); padding: 5px 15px; border-radius: 15px; font-size: 0.9rem;">
+                                        전략: ${strategyName}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div style="font-size: 0.95rem; margin-bottom: 10px;">
+                                <strong>추천 코인 ${rec.count}개</strong> (평균 점수: ${(rec.coins.reduce((sum, c) => sum + c.score, 0) / rec.coins.length).toFixed(0)}점)
+                            </div>
+
+                            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px;">
+                                ${rec.coins.slice(0, 12).map(coin => {
+                                    const coinName = coin.market.replace('KRW-', '');
+                                    const scoreColor = coin.score >= 70 ? '#00ff00' : coin.score >= 50 ? '#ffa500' : '#ccc';
+
+                                    return `
+                                        <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+                                            <div style="font-weight: bold; margin-bottom: 5px;">${coinName}</div>
+                                            <div style="font-size: 0.85rem; color: #ccc; margin-bottom: 5px;">${coin.name}</div>
+                                            <div style="color: ${scoreColor}; font-weight: bold; margin-bottom: 5px;">점수: ${coin.score.toFixed(0)}</div>
+                                            <div style="font-size: 0.75rem; color: #999;">₩${coin.price.toLocaleString()}</div>
+                                            <div style="font-size: 0.75rem; color: #667eea; margin-top: 5px;">
+                                                ${coin.reasons.slice(0, 2).join(', ')}
+                                            </div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            document.getElementById('recommendationHistoryModal').style.display = 'block';
+        }
+
         // 페이지 로드 완료 후 초기화
         window.addEventListener('load', async function() {
             initChart();
@@ -2265,6 +2563,17 @@ ${tradingBot.dailyPnL >= 0 ? '✅ 순조롭게 수익 중입니다!' : '⚠️ �
             loadTradingConfig();
             updateDisplay();
             updatePositionDisplay();
+
+            // AI 설정 불러오기
+            const savedAISettings = localStorage.getItem('aiSettings');
+            if (savedAISettings) {
+                try {
+                    aiSettings = JSON.parse(savedAISettings);
+                    addLog(`⚙️ AI 추천 설정 로드됨 (전략: ${getStrategyName()})`, 'info');
+                } catch (e) {
+                    console.error('AI 설정 로드 실패:', e);
+                }
+            }
 
             // 코인 목록 자동 로드
             addLog('시스템 초기화 중...', 'info');
