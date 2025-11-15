@@ -158,22 +158,25 @@ class SimpleTradingBot:
         self._print_status()
     
     def _print_status(self):
-        if self.config.paper_trading:
+        # wallet이 None이 아니고 모의거래 모드일 때만 wallet 사용
+        if self.config.paper_trading and self.wallet is not None:
             total_value = self.wallet.get_total_value()
         else:
             total_value = self._get_total_balance()
-        
+
         profit = total_value - self.config.initial_amount
         profit_rate = (profit / self.config.initial_amount) * 100
         positions = len(self.risk_manager.positions) if hasattr(self.risk_manager, 'positions') else 0
-        
+
         print(f"자산: ₩{total_value:,.0f} | 수익: ₩{profit:+,.0f} ({profit_rate:+.2f}%) | 포지션: {positions}개")
     
     def _get_total_balance(self):
         try:
-            if self.config.paper_trading:
+            # 모의거래 모드이고 wallet이 있는 경우
+            if self.config.paper_trading and self.wallet is not None:
                 return self.wallet.get_total_value()
-            else:
+            # 실거래 모드 또는 wallet이 없는 경우
+            elif hasattr(self, 'upbit') and self.upbit is not None:
                 import pyupbit
                 total = self.upbit.get_balance("KRW")
                 balances = self.upbit.get_balances()
@@ -184,7 +187,10 @@ class SimpleTradingBot:
                         if current_price:
                             total += float(balance['balance']) * current_price
                 return total
-        except:
+            else:
+                return self.config.initial_amount
+        except Exception as e:
+            print(f"잔고 조회 오류: {e}")
             return self.config.initial_amount
     
     def _get_coin_balances(self):
