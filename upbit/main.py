@@ -122,58 +122,78 @@ class SimpleTradingBot:
     
     def _simple_trading_loop(self):
         print(f"\n=== {datetime.now().strftime('%H:%M:%S')} 거래 체크 ===")
-        
+
         # 일일 한도 확인
         limit_reached, reason = self.risk_manager.check_daily_limits()
         if limit_reached:
             print(f"일일 한도 도달: {reason}")
             self.stop()
             return
-        
+
+        # 분석 대상 코인 출력
+        print(f"🔍 분석 대상: {len(self.config.target_coins)}개 코인")
+
         # 각 코인 분석
+        analyzed_count = 0
+        signal_count = 0
+
         for symbol in self.config.target_coins:
             try:
                 if not self.db.can_trade_today(symbol) and self.config.daily_trade_limit:
+                    print(f"  ⏭️ {symbol}: 일일 거래 제한")
                     continue
-                
+
+                analyzed_count += 1
                 signal = self.strategy.analyze_symbol(symbol, True)
+
                 if signal:
-                    print(f"{symbol}: {signal['action']} 신호 (신뢰도: {signal['confidence']:.1%})")
-                    
+                    signal_count += 1
+                    print(f"  📊 {symbol}: {signal['action']} 신호 (신뢰도: {signal['confidence']:.1%})")
+
                     if signal['action'] == 'BUY':
                         result = self.order_executor.execute_buy_order(signal)
                         if result:
                             self.db.record_trade_session(symbol)
-                            print(f"매수 완료: {symbol}")
-                    
+                            print(f"  ✅ 매수 완료: {symbol}")
+
                     elif signal['action'] == 'SELL' and symbol in self.risk_manager.positions:
                         result = self.order_executor.execute_sell_order(signal)
                         if result:
-                            print(f"매도 완료: {symbol} (수익: {result.profit_rate:+.2%})")
-                            
+                            print(f"  ✅ 매도 완료: {symbol} (수익: {result.profit_rate:+.2%})")
+                else:
+                    # 신호 없음 (너무 많으면 생략)
+                    if analyzed_count <= 10:  # 처음 10개만 표시
+                        print(f"  ⚪ {symbol}: 신호 없음")
+
             except Exception as e:
+                print(f"  ❌ {symbol}: 분석 오류 - {str(e)[:50]}")
                 self.logger.log_error('simple_bot', e, {'symbol': symbol})
-        
+
+        print(f"\n📈 분석 요약: {analyzed_count}개 분석, {signal_count}개 신호 발견")
+
         # 현재 상태 출력
         self._print_status()
     
     def _print_status(self):
-        if self.config.paper_trading:
+        # wallet이 None이 아니고 모의거래 모드일 때만 wallet 사용
+        if self.config.paper_trading and self.wallet is not None:
             total_value = self.wallet.get_total_value()
         else:
             total_value = self._get_total_balance()
-        
+
         profit = total_value - self.config.initial_amount
         profit_rate = (profit / self.config.initial_amount) * 100
         positions = len(self.risk_manager.positions) if hasattr(self.risk_manager, 'positions') else 0
-        
+
         print(f"자산: ₩{total_value:,.0f} | 수익: ₩{profit:+,.0f} ({profit_rate:+.2f}%) | 포지션: {positions}개")
     
     def _get_total_balance(self):
         try:
-            if self.config.paper_trading:
+            # 모의거래 모드이고 wallet이 있는 경우
+            if self.config.paper_trading and self.wallet is not None:
                 return self.wallet.get_total_value()
-            else:
+            # 실거래 모드 또는 wallet이 없는 경우
+            elif hasattr(self, 'upbit') and self.upbit is not None:
                 import pyupbit
                 total = self.upbit.get_balance("KRW")
                 balances = self.upbit.get_balances()
@@ -184,7 +204,10 @@ class SimpleTradingBot:
                         if current_price:
                             total += float(balance['balance']) * current_price
                 return total
-        except:
+            else:
+                return self.config.initial_amount
+        except Exception as e:
+            print(f"잔고 조회 오류: {e}")
             return self.config.initial_amount
     
     def _get_coin_balances(self):
@@ -247,18 +270,54 @@ from paper_trading_dashboard import create_enhanced_trading_dashboard
 
 def main():
     print("=== 업비트 자동매매 시스템 (Enhanced UI) ===")
-    
+
     # 설정 로드
     config = TradingConfig.load_from_file()
-    print(f"모드: {'모의거래' if config.paper_trading else '실거래'}")
-    print(f"초기자금: ₩{config.initial_amount:,.0f}")
-    print(f"대상코인: {', '.join(config.target_coins)}")
-    
+    print(f"\n⚙️ 기본 설정")
+    print(f"  모드: {'모의거래' if config.paper_trading else '실거래'}")
+    print(f"  초기자금: ₩{config.initial_amount:,.0f}")
+    print(f"  최대 포지션: {config.max_positions}개")
+    print(f"  손절매: {config.stop_loss_rate*100:.1f}%")
+
+    # 코인 필터링 및 상세 정보 표시
+    print("\n🔍 코인 분석 중...")
+    coin_info = config.get_filtered_coins(verbose=True)
+
+    # 선택된 코인 업데이트
+    config.target_coins = coin_info['selected']
+
+    # 상세 정보 출력
+    print("\n" + "="*60)
+    print("📋 거래 대상 코인 상세 정보")
+    print("="*60)
+
+    # 포함된 코인
+    included = [(k, v) for k, v in coin_info['details'].items() if v['status'] == 'included']
+    if included:
+        print(f"\n✅ 거래 대상 ({len(included)}개):")
+        for i, (coin, info) in enumerate(included[:20], 1):  # 최대 20개만 표시
+            print(f"  {i:2d}. {coin:12s} - {info['reason']}")
+
+        if len(included) > 20:
+            print(f"  ... 외 {len(included)-20}개 코인")
+
+    # 제외된 코인 (전체 선택 시)
+    excluded = [(k, v) for k, v in coin_info['details'].items() if v['status'] == 'excluded']
+    if excluded:
+        print(f"\n❌ 제외된 코인 ({len(excluded)}개) - 상위 10개:")
+        for i, (coin, info) in enumerate(excluded[:10], 1):
+            print(f"  {i:2d}. {coin:12s} - {info['reason']}")
+
+        if len(excluded) > 10:
+            print(f"  ... 외 {len(excluded)-10}개 코인")
+
+    print("="*60)
+
     if not config.paper_trading:
         confirm = input("\n🚨 실거래 모드입니다! 계속하시겠습니까? (yes/no): ")
         if confirm.lower() != 'yes':
             return
-    
+
     # 봇 생성
     bot = SimpleTradingBot(config)
     

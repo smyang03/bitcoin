@@ -13,6 +13,10 @@
   "telegram_interval": 30,
   "include_fees": true,
   "upbit_fee_rate": 0.0005,
+  "_comment_target_coins": "특정 코인 지정 또는 전체 선택 가능",
+  "_comment_option1": "옵션 1: 특정 코인 지정 (현재 설정)",
+  "_comment_option2": "옵션 2: 전체 코인 자동 필터링 - target_coins를 [\"ALL\"]로 변경",
+  "_comment_filter": "전체 선택 시 필터링 기준: 가격 10원 이상, 일일 거래량 10억원 이상",
   "target_coins": [
     "KRW-BTC",
     "KRW-ETH",

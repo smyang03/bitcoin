@@ -40,14 +40,14 @@ def create_enhanced_trading_dashboard(bot):
                 'last_update': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             }
             
-            if bot.config.paper_trading and hasattr(bot, 'wallet'):
+            if bot.config.paper_trading and hasattr(bot, 'wallet') and bot.wallet is not None:
                 total_balance = float(bot.wallet.get_total_value() or 0)
                 krw_balance = float(bot.wallet.get_balance('KRW') or 0)
-                coin_balances = {k: float(v) for k, v in bot.wallet.balances.items() 
+                coin_balances = {k: float(v) for k, v in bot.wallet.balances.items()
                                if k != 'KRW' and v > 0}
             else:
                 total_balance = float(bot._get_total_balance() or 0)
-                krw_balance = float(bot.upbit.get_balance('KRW') or 0) if hasattr(bot, 'upbit') else 0
+                krw_balance = float(bot.upbit.get_balance('KRW') or 0) if hasattr(bot, 'upbit') and bot.upbit is not None else 0
                 coin_balances = bot._get_coin_balances() or {}
             
             initial_amount = float(bot.config.initial_amount)
