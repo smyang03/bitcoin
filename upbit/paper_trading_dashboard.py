@@ -13,11 +13,31 @@ import pyupbit
 import time
 import logging
 import threading
+from collections import deque
+import sys
+import io
 
 def create_enhanced_trading_dashboard(bot):
     """복잡한 HTML UI + 실제 백엔드 로직 통합 대시보드"""
-    
+
     app = Flask(__name__)
+
+    # 실시간 로그 저장소 (최대 200개)
+    live_logs = deque(maxlen=200)
+
+    # 로그 추가 함수
+    def add_live_log(message, level='info'):
+        """실시간 로그 추가"""
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        log_entry = {
+            'timestamp': timestamp,
+            'message': message,
+            'level': level
+        }
+        live_logs.append(log_entry)
+
+    # 봇에 로그 함수 추가
+    bot.add_live_log = add_live_log
     
     def get_detailed_status():
         """상세한 거래 상태 조회"""
@@ -1189,16 +1209,55 @@ def create_enhanced_trading_dashboard(bot):
             const logContainer = document.getElementById('logContainer');
             const logEntry = document.createElement('div');
             logEntry.className = `log-entry ${type}`;
-            
+
             const timestamp = new Date().toLocaleTimeString();
             logEntry.innerHTML = `<strong>[${timestamp}]</strong> ${message}`;
-            
+
             // 최신 로그를 위에 추가
             logContainer.insertBefore(logEntry, logContainer.firstChild);
-            
+
             // 최대 100개 로그 유지
             while (logContainer.children.length > 100) {
                 logContainer.removeChild(logContainer.lastChild);
+            }
+        }
+
+        // 서버에서 로그 가져오기
+        let lastLogCount = 0;
+        async function updateLogs() {
+            try {
+                const response = await fetch('/api/logs');
+                const data = await response.json();
+
+                if (data.success && data.logs && data.logs.length > 0) {
+                    // 새로운 로그만 추가
+                    if (data.logs.length > lastLogCount) {
+                        const newLogs = data.logs.slice(lastLogCount);
+                        const logContainer = document.getElementById('logContainer');
+
+                        // 기존 로그 초기화 (첫 로드 시)
+                        if (lastLogCount === 0) {
+                            logContainer.innerHTML = '';
+                        }
+
+                        // 새 로그 추가
+                        newLogs.forEach(log => {
+                            const logEntry = document.createElement('div');
+                            logEntry.className = `log-entry ${log.level}`;
+                            logEntry.innerHTML = `<strong>[${log.timestamp}]</strong> ${log.message}`;
+                            logContainer.insertBefore(logEntry, logContainer.firstChild);
+                        });
+
+                        // 최대 100개 유지
+                        while (logContainer.children.length > 100) {
+                            logContainer.removeChild(logContainer.lastChild);
+                        }
+
+                        lastLogCount = data.logs.length;
+                    }
+                }
+            } catch (error) {
+                console.error('로그 업데이트 오류:', error);
             }
         }
 
@@ -1237,10 +1296,14 @@ def create_enhanced_trading_dashboard(bot):
                 
                 // 상태 업데이트
                 await updateDisplay();
-                
-                // 주기적 업데이트 시작 (거래 중이 아니어도 상태는 확인)
+
+                // 로그 초기 로드
+                await updateLogs();
+
+                // 주기적 업데이트 시작
                 setInterval(updateDisplay, 10000); // 10초마다 상태 확인
-                
+                setInterval(updateLogs, 3000); // 3초마다 로그 업데이트
+
                 addLog('✅ 업비트 자동매매 시스템이 준비되었습니다!', 'success');
                 addLog('💡 팁: 먼저 API 키를 설정하고 연결을 테스트하세요.', 'info');
                 
@@ -1369,7 +1432,17 @@ def create_enhanced_trading_dashboard(bot):
             return jsonify({'success': True, 'data': status})
         except Exception as e:
             return jsonify({'success': False, 'message': f'상태 조회 실패: {str(e)}'})
-    
+
+    @app.route('/api/logs')
+    def get_logs_api():
+        """실시간 로그 조회 API"""
+        try:
+            # 최근 50개 로그 반환
+            recent_logs = list(live_logs)[-50:]
+            return jsonify({'success': True, 'logs': recent_logs})
+        except Exception as e:
+            return jsonify({'success': False, 'message': f'로그 조회 실패: {str(e)}'})
+
     @app.route('/api/coins')
     def get_coins_api():
         try:
