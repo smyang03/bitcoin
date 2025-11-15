@@ -49,36 +49,36 @@ class SimpleTradingBot:
     
     def start(self):
         if not self._validate_fund_safety():
-            print("거래 시작 실패: 자금 검증 오류")
+            self._log("거래 시작 실패: 자금 검증 오류", 'error')
             return False
-        
+
         self.is_running = True
         self.is_paused = False
-        print("거래 시작!")
-        
+        self._log("🚀 거래 시작!", 'success')
+
         try:
             while self.is_running:
                 if not self.is_paused:
                     self._simple_trading_loop()
                 time.sleep(30)
-                
+
         except KeyboardInterrupt:
-            print("\n거래 중지")
+            self._log("\n⏹️ 거래 중지", 'warning')
             self.stop()
-        
+
         return True
-    
+
     def stop(self):
         self.is_running = False
         self.is_paused = False
-        print("거래 종료")
+        self._log("⏹️ 거래 종료", 'warning')
         return True
-    
+
     def pause_trading(self):
         """거래 일시정지/재시작"""
         self.is_paused = not self.is_paused
         status = "일시정지" if self.is_paused else "재시작"
-        print(f"거래 {status}")
+        self._log(f"⏸️ 거래 {status}", 'warning')
     
     def emergency_sell_all(self):
         """긴급 매도 (모든 포지션 정리)"""
@@ -120,18 +120,24 @@ class SimpleTradingBot:
             print(f"긴급 매도 실패: {e}")
             return False
     
+    def _log(self, message, level='info'):
+        """웹과 콘솔에 동시 로그 출력"""
+        print(message)
+        if hasattr(self, 'add_live_log'):
+            self.add_live_log(message, level)
+
     def _simple_trading_loop(self):
-        print(f"\n=== {datetime.now().strftime('%H:%M:%S')} 거래 체크 ===")
+        self._log(f"\n=== {datetime.now().strftime('%H:%M:%S')} 거래 체크 ===", 'info')
 
         # 일일 한도 확인
         limit_reached, reason = self.risk_manager.check_daily_limits()
         if limit_reached:
-            print(f"일일 한도 도달: {reason}")
+            self._log(f"일일 한도 도달: {reason}", 'warning')
             self.stop()
             return
 
         # 분석 대상 코인 출력
-        print(f"🔍 분석 대상: {len(self.config.target_coins)}개 코인")
+        self._log(f"🔍 분석 대상: {len(self.config.target_coins)}개 코인", 'info')
 
         # 각 코인 분석
         analyzed_count = 0
@@ -140,7 +146,7 @@ class SimpleTradingBot:
         for symbol in self.config.target_coins:
             try:
                 if not self.db.can_trade_today(symbol) and self.config.daily_trade_limit:
-                    print(f"  ⏭️ {symbol}: 일일 거래 제한")
+                    self._log(f"  ⏭️ {symbol}: 일일 거래 제한", 'warning')
                     continue
 
                 analyzed_count += 1
@@ -148,28 +154,28 @@ class SimpleTradingBot:
 
                 if signal:
                     signal_count += 1
-                    print(f"  📊 {symbol}: {signal['action']} 신호 (신뢰도: {signal['confidence']:.1%})")
+                    self._log(f"  📊 {symbol}: {signal['action']} 신호 (신뢰도: {signal['confidence']:.1%})", 'info')
 
                     if signal['action'] == 'BUY':
                         result = self.order_executor.execute_buy_order(signal)
                         if result:
                             self.db.record_trade_session(symbol)
-                            print(f"  ✅ 매수 완료: {symbol}")
+                            self._log(f"  ✅ 매수 완료: {symbol}", 'success')
 
                     elif signal['action'] == 'SELL' and symbol in self.risk_manager.positions:
                         result = self.order_executor.execute_sell_order(signal)
                         if result:
-                            print(f"  ✅ 매도 완료: {symbol} (수익: {result.profit_rate:+.2%})")
+                            self._log(f"  ✅ 매도 완료: {symbol} (수익: {result.profit_rate:+.2%})", 'success')
                 else:
                     # 신호 없음 (너무 많으면 생략)
                     if analyzed_count <= 10:  # 처음 10개만 표시
-                        print(f"  ⚪ {symbol}: 신호 없음")
+                        print(f"  ⚪ {symbol}: 신호 없음")  # 콘솔에만 표시
 
             except Exception as e:
-                print(f"  ❌ {symbol}: 분석 오류 - {str(e)[:50]}")
+                self._log(f"  ❌ {symbol}: 분석 오류 - {str(e)[:50]}", 'error')
                 self.logger.log_error('simple_bot', e, {'symbol': symbol})
 
-        print(f"\n📈 분석 요약: {analyzed_count}개 분석, {signal_count}개 신호 발견")
+        self._log(f"\n📈 분석 요약: {analyzed_count}개 분석, {signal_count}개 신호 발견", 'info')
 
         # 현재 상태 출력
         self._print_status()
