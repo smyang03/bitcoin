@@ -25,14 +25,18 @@ class TradingBot:
         # 설정 초기화
         if config is None:
             config = TradingConfig.load_from_file()
+
+        # ⭐ 버그 수정: self.config에 할당
+        self.config = config
+
         api_config = APIConfig()
         self.access_key, self.secret_key = api_config.get_upbit_keys()
-        
+
         # 상태 변수
         self.is_running = False
         self.is_paused = False
         self.last_telegram_notification = None
-        
+
         # 핵심 컴포넌트 초기화
         self._initialize_components()
         

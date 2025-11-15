@@ -607,37 +607,40 @@ class RiskManager:
                 self.logger.log_warning('risk_manager', f"포지션 데이터가 딕셔너리가 아님: {type(position)}")
                 return False
             
-            # 손절가 확인
+            # 손절가 확인 (일관된 키 사용: avg_price)
             stop_loss_price = position.get('stop_loss')
+            avg_price = position.get('avg_price')
+
             if stop_loss_price is None:
-                # 손절가가 설정되지 않은 경우 진입가 기준으로 계산
-                entry_price = position.get('entry_price')
-                if entry_price is None:
-                    self.logger.log_warning('risk_manager', f"{symbol} 진입가 정보 없음")
+                # 손절가가 설정되지 않은 경우 평균단가 기준으로 계산
+                if avg_price is None:
+                    self.logger.log_warning('risk_manager', f"{symbol} 평균단가 정보 없음")
                     return False
-                
+
                 try:
-                    entry_price = float(entry_price)
-                    stop_loss_price = entry_price * (1 - self.config.stop_loss_rate)
+                    avg_price = float(avg_price)
+                    stop_loss_price = avg_price * (1 - self.config.stop_loss_rate)
                     # 계산된 손절가를 저장
                     self.positions[symbol]['stop_loss'] = stop_loss_price
                 except (ValueError, TypeError):
-                    self.logger.log_warning('risk_manager', f"진입가 변환 실패: {entry_price}")
+                    self.logger.log_warning('risk_manager', f"평균단가 변환 실패: {avg_price}")
                     return False
             else:
                 try:
                     stop_loss_price = float(stop_loss_price)
+                    avg_price = float(avg_price) if avg_price else current_price
                 except (ValueError, TypeError):
-                    self.logger.log_warning('risk_manager', f"손절가 변환 실패: {stop_loss_price}")
+                    self.logger.log_warning('risk_manager', f"가격 변환 실패")
                     return False
-            
+
             # 손절매 조건 확인
             if current_price <= stop_loss_price:
-                loss_rate = (current_price - position.get('entry_price', current_price)) / position.get('entry_price', current_price)
-                
-                self.logger.log_warning('risk_manager', 
-                                      f"손절매 발동: {symbol}, "
+                loss_rate = (current_price - avg_price) / avg_price if avg_price > 0 else 0
+
+                self.logger.log_warning('risk_manager',
+                                      f"🔻 손절매 발동: {symbol}, "
                                       f"현재가: ₩{current_price:,.0f}, "
+                                      f"평균단가: ₩{avg_price:,.0f}, "
                                       f"손절가: ₩{stop_loss_price:,.0f}, "
                                       f"손실률: {loss_rate:.2%}")
                 return True
@@ -727,18 +730,17 @@ class OrderExecutor:
                     is_paper_trade=self.is_paper_trading
                 )
                 
-                # 포지션 추가
-                # 포지션 통합 로직 추가
+                # ⭐ 포지션 추가 - 일관된 키 사용
                 if symbol in self.risk_manager.positions:
-                    # 기존 포지션과 통합
+                    # 기존 포지션과 통합 (추가 매수)
                     existing = self.risk_manager.positions[symbol]
                     old_quantity = existing['quantity']
                     old_invested = existing['total_invested']
-                    
+
                     new_total_quantity = old_quantity + quantity
                     new_total_invested = old_invested + position_size
                     new_avg_price = new_total_invested / new_total_quantity
-                    
+
                     self.risk_manager.positions[symbol] = {
                         'avg_price': new_avg_price,
                         'quantity': new_total_quantity,
@@ -748,10 +750,11 @@ class OrderExecutor:
                         'stop_loss': new_avg_price * (1 - self.risk_manager.config.stop_loss_rate),
                         'buy_orders': existing.get('buy_orders', []) + [result['uuid']]
                     }
-                    
-                    self.logger.log_info('order_executor', 
-                                        f"{symbol} 포지션 통합: 평균단가 ₩{new_avg_price:,.0f}, "
-                                        f"총 수량 {new_total_quantity:.8f}")
+
+                    self.logger.log_info('order_executor',
+                                        f"✅ {symbol} 추가 매수 - "
+                                        f"평균단가: ₩{old_invested/old_quantity:,.0f} → ₩{new_avg_price:,.0f}, "
+                                        f"총 투자: ₩{old_invested:,.0f} → ₩{new_total_invested:,.0f}")
                 else:
                     # 신규 포지션 생성
                     self.risk_manager.positions[symbol] = {
@@ -763,6 +766,12 @@ class OrderExecutor:
                         'stop_loss': current_price * (1 - self.risk_manager.config.stop_loss_rate),
                         'buy_orders': [result['uuid']]
                     }
+
+                    self.logger.log_info('order_executor',
+                                        f"✅ {symbol} 신규 매수 - "
+                                        f"평균단가: ₩{current_price:,.0f}, "
+                                        f"투자금: ₩{position_size:,.0f}, "
+                                        f"수량: {quantity:.8f}")
                 
                 # 손익 업데이트
                 self.risk_manager.update_pnl(trade_result)
@@ -817,14 +826,14 @@ class OrderExecutor:
                 self.logger.log_info('order_executor', f"{currency} 보유량 없음")
                 return None
             
-            # 포지션 정보
-            entry_price = position.get('entry_price', current_price)
-            invested_amount = position.get('invested_amount', 0)
+            # 포지션 정보 (일관된 키 사용)
+            avg_price = position.get('avg_price', current_price)
+            total_invested = position.get('total_invested', 0)
             quantity = position.get('quantity', coin_balance)
-            
-            self.logger.log_info('order_executor', 
+
+            self.logger.log_info('order_executor',
                                f"{symbol} 매도 시도: {coin_balance:.8f} {currency} "
-                               f"(투자금액: ₩{invested_amount:,.0f})")
+                               f"(평균단가: ₩{avg_price:,.0f}, 총투자: ₩{total_invested:,.0f})")
             
             # 매도 주문 실행
             try:
@@ -841,32 +850,47 @@ class OrderExecutor:
                 self.logger.log_error('order_executor', e, {'action': 'sell_order', 'symbol': symbol})
                 return None
             
-            # 정확한 수익 계산
-# 정확한 수익 계산 - 수정됨
+            # ⭐ 정확한 수익 계산 - 개선됨
             gross_amount = coin_balance * current_price
             fee = self.risk_manager.calculate_fees(gross_amount, 'sell')
             net_amount = gross_amount - fee
 
-            # 포지션에서 실제 투자금액 가져오기 (핵심 수정)
-            position = self.risk_manager.positions.get(symbol, {})
-            actual_invested = position.get('total_invested', invested_amount)
-            actual_quantity = position.get('quantity', coin_balance)
+            # 부분 매도 여부 확인
+            is_partial_sell = abs(coin_balance - quantity) > 1e-8  # 부동소수점 오차 고려
 
             # 부분 매도인 경우 비례 계산
-            if coin_balance < actual_quantity:
-                proportional_invested = actual_invested * (coin_balance / actual_quantity)
-            else:
-                proportional_invested = actual_invested
+            if is_partial_sell and quantity > 0:
+                sell_ratio = coin_balance / quantity
+                proportional_invested = total_invested * sell_ratio
 
-            # 수익률 계산
+                self.logger.log_info('order_executor',
+                                   f"{symbol} 부분 매도 {sell_ratio:.1%} "
+                                   f"(전체: {quantity:.8f}, 매도: {coin_balance:.8f})")
+            else:
+                proportional_invested = total_invested
+                self.logger.log_info('order_executor', f"{symbol} 전량 매도")
+
+            # 수익 계산
             profit_amount = net_amount - proportional_invested
             profit_rate = profit_amount / proportional_invested if proportional_invested > 0 else 0
 
-            # 비현실적인 수익률 제한 (1220% 같은 오류 방지)
-            if abs(profit_rate) > 10:  # 1000% 초과시 오류로 간주
-                self.logger.log_warning('order_executor', 
-                                    f"비현실적 수익률 감지: {profit_rate:.2%}, 재계산 필요")
-                profit_rate = (current_price - position.get('avg_price', current_price)) / position.get('avg_price', current_price)
+            # 검증: 비현실적인 수익률 감지
+            if abs(profit_rate) > 3.0:  # 300% 초과시 경고
+                self.logger.log_warning('order_executor',
+                                    f"⚠️ 높은 수익률 감지: {profit_rate:.2%}")
+                self.logger.log_warning('order_executor',
+                                    f"   현재가: ₩{current_price:,.0f}, 평균단가: ₩{avg_price:,.0f}")
+                self.logger.log_warning('order_executor',
+                                    f"   순수익: ₩{net_amount:,.0f}, 투자액: ₩{proportional_invested:,.0f}")
+
+                # 대안 계산: 가격 변화율 기반
+                alternative_rate = (current_price - avg_price) / avg_price if avg_price > 0 else 0
+
+                if abs(alternative_rate) < abs(profit_rate):
+                    self.logger.log_warning('order_executor',
+                                        f"   대안 수익률 사용: {alternative_rate:.2%} (기존: {profit_rate:.2%})")
+                    profit_rate = alternative_rate
+                    profit_amount = proportional_invested * profit_rate
                         
             # 거래 결과 생성
             trade_result = TradeResult(
@@ -878,17 +902,32 @@ class OrderExecutor:
                 price=current_price,
                 amount=gross_amount,
                 fee=fee,
-                invested_amount=invested_amount,  # 원래 투자한 금액
-                profit_amount=profit_amount,     # 절대 수익 금액
-                profit_rate=profit_rate,         # 투자 대비 수익률
+                invested_amount=proportional_invested,  # 실제 매도된 부분의 투자 금액
+                profit_amount=profit_amount,            # 절대 수익 금액
+                profit_rate=profit_rate,                # 투자 대비 수익률
                 portfolio_value_before=portfolio_value_before,
                 portfolio_value_after=portfolio_value_before + profit_amount,
                 strategy=', '.join(signal.get('strategies', ['manual_sell'])),
                 is_paper_trade=self.is_paper_trading
             )
-            
-            # 포지션 제거
-            del self.risk_manager.positions[symbol]
+
+            # 포지션 업데이트 (부분 매도) 또는 제거 (전량 매도)
+            if is_partial_sell:
+                # 부분 매도: 포지션 업데이트
+                remaining_quantity = quantity - coin_balance
+                remaining_invested = total_invested - proportional_invested
+
+                self.risk_manager.positions[symbol]['quantity'] = remaining_quantity
+                self.risk_manager.positions[symbol]['total_invested'] = remaining_invested
+
+                self.logger.log_info('order_executor',
+                                   f"{symbol} 포지션 업데이트: "
+                                   f"남은수량 {remaining_quantity:.8f}, "
+                                   f"남은투자금 ₩{remaining_invested:,.0f}")
+            else:
+                # 전량 매도: 포지션 제거
+                del self.risk_manager.positions[symbol]
+                self.logger.log_info('order_executor', f"{symbol} 포지션 완전 청산")
             
             # 손익 업데이트
             self.risk_manager.update_pnl(trade_result)
