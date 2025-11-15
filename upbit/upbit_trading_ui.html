@@ -594,8 +594,9 @@
             <div class="form-group">
                 <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
                     <button class="btn btn-primary" onclick="loadUpbitCoins()">코인 목록 새로고침</button>
-                    <button class="btn btn-success" onclick="selectRecommendedCoins()">추천 코인 선택</button>
+                    <button class="btn btn-success" onclick="selectAllCoins()">전체 선택</button>
                     <button class="btn btn-warning" onclick="clearAllCoins()">전체 해제</button>
+                    <button class="btn" style="background: linear-gradient(45deg, #667eea, #764ba2); color: white;" onclick="getAIRecommendations()">🤖 AI 추천</button>
                     <span id="coinLoadStatus" style="color: #ccc;"></span>
                 </div>
                 
@@ -932,6 +933,61 @@
             }
         }
 
+        // 업비트 코인 목록 로드
+        async function loadUpbitCoins() {
+            try {
+                document.getElementById('coinLoadStatus').textContent = '코인 목록 로딩 중...';
+                addLog('업비트 코인 목록을 불러오는 중...', 'info');
+
+                // 1. 업비트 마켓 코드 조회
+                const marketResponse = await fetch('https://api.upbit.com/v1/market/all?isDetails=true');
+                const markets = await marketResponse.json();
+
+                // KRW 마켓만 필터링
+                const krwMarkets = markets.filter(market => market.market.startsWith('KRW-'));
+
+                // 2. 현재가 정보 조회
+                const symbols = krwMarkets.map(m => m.market).join(',');
+                const tickerResponse = await fetch(`https://api.upbit.com/v1/ticker?markets=${symbols}`);
+                const tickers = await tickerResponse.json();
+
+                // 3. 코인 데이터 결합
+                upbitCoins = krwMarkets.map(market => {
+                    const ticker = tickers.find(t => t.market === market.market);
+                    return {
+                        market: market.market,
+                        korean_name: market.korean_name,
+                        english_name: market.english_name,
+                        current_price: ticker ? ticker.trade_price : 0,
+                        change: ticker ? ticker.change : 'EVEN',
+                        change_rate: ticker ? ticker.change_rate : 0,
+                        acc_trade_price_24h: ticker ? ticker.acc_trade_price_24h : 0,
+                        high_price: ticker ? ticker.high_price : 0,
+                        low_price: ticker ? ticker.low_price : 0,
+                        prev_closing_price: ticker ? ticker.prev_closing_price : 0
+                    };
+                }).filter(coin => coin.acc_trade_price_24h > 0); // 거래량 있는 것만
+
+                document.getElementById('coinLoadStatus').textContent = `${upbitCoins.length}개 코인 로드 완료`;
+                addLog(`업비트 코인 ${upbitCoins.length}개 로드 완료`, 'success');
+
+                // 4. 코인 분석 수행
+                document.getElementById('coinLoadStatus').textContent = '코인 분석 중...';
+                await analyzeCoins();
+
+                // 5. 테이블 업데이트
+                updateCoinTable();
+
+                document.getElementById('coinLoadStatus').textContent = `✅ 완료 (${upbitCoins.length}개)`;
+                addLog(`✅ 코인 분석 완료`, 'success');
+
+            } catch (error) {
+                console.error('코인 로드 오류:', error);
+                addLog('❌ 코인 목록 로드 실패: ' + error.message, 'error');
+                document.getElementById('coinLoadStatus').textContent = '로드 실패';
+            }
+        }
+
         // 코인 분석 (시장데이터 + 기술지표)
         async function analyzeCoins() {
             const analysisPromises = upbitCoins.slice(0, 50).map(async (coin) => {
@@ -1099,22 +1155,203 @@
             });
         }
 
-        // 추천 코인 선택
+        // 추천 코인 선택 (간단한 거래량 기반)
         function selectRecommendedCoins() {
             document.querySelectorAll('input[id^="coin_"]').forEach(cb => cb.checked = false);
-            
+
             const recommended = upbitCoins
                 .filter(coin => coin.acc_trade_price_24h > 1000000000)
                 .sort((a, b) => b.acc_trade_price_24h - a.acc_trade_price_24h)
                 .slice(0, 15);
-            
+
             recommended.forEach(coin => {
                 const checkbox = document.getElementById(`coin_${coin.market}`);
                 if (checkbox) checkbox.checked = true;
             });
-            
+
             updateSelectedCoins();
             addLog(`✅ 추천 코인 ${recommended.length}개 선택됨`, 'success');
+        }
+
+        // AI 기반 코인 추천 (시장 분석)
+        async function getAIRecommendations() {
+            if (upbitCoins.length === 0) {
+                alert('먼저 코인 목록을 새로고침 해주세요.');
+                return;
+            }
+
+            addLog('🤖 AI가 시장을 분석하고 있습니다...', 'info');
+            document.getElementById('coinLoadStatus').textContent = 'AI 분석 중...';
+
+            try {
+                // 각 코인에 대한 점수 계산
+                const scoredCoins = upbitCoins
+                    .filter(coin => {
+                        const analysis = coinAnalysis[coin.market];
+                        return analysis && coin.acc_trade_price_24h > 500000000; // 최소 거래량 필터
+                    })
+                    .map(coin => {
+                        const analysis = coinAnalysis[coin.market];
+                        let score = 0;
+                        let reasons = [];
+
+                        // 1. RSI 기반 점수 (과매도 구간 선호)
+                        if (analysis.indicators.rsi < 30) {
+                            score += 40;
+                            reasons.push('RSI 과매도');
+                        } else if (analysis.indicators.rsi < 40) {
+                            score += 20;
+                            reasons.push('RSI 저평가');
+                        } else if (analysis.indicators.rsi > 70) {
+                            score -= 30;
+                            reasons.push('RSI 과매수');
+                        }
+
+                        // 2. 이동평균 추세
+                        if (analysis.indicators.ma_trend === 'BULLISH') {
+                            score += 25;
+                            reasons.push('상승추세');
+                        } else if (analysis.indicators.ma_trend === 'BEARISH') {
+                            score -= 15;
+                        }
+
+                        // 3. 거래량 급증
+                        if (analysis.marketData.volume_ratio > 2.0) {
+                            score += 30;
+                            reasons.push('거래량 급증');
+                        } else if (analysis.marketData.volume_ratio > 1.5) {
+                            score += 15;
+                            reasons.push('거래량 증가');
+                        }
+
+                        // 4. 변동성 (적당한 변동성 선호)
+                        const volatility = analysis.marketData.volatility;
+                        if (volatility > 0.03 && volatility < 0.08) {
+                            score += 20;
+                            reasons.push('적절한 변동성');
+                        } else if (volatility > 0.15) {
+                            score -= 20;
+                            reasons.push('변동성 과다');
+                        }
+
+                        // 5. 24시간 변동률 (적당한 하락 후 반등 가능성)
+                        if (coin.change_rate < 0 && coin.change_rate > -0.05) {
+                            score += 15;
+                            reasons.push('반등 가능성');
+                        } else if (coin.change_rate > 0.1) {
+                            score -= 10; // 급등 후 조정 가능성
+                        }
+
+                        // 6. 거래대금 (유동성)
+                        if (coin.acc_trade_price_24h > 10000000000) {
+                            score += 10;
+                            reasons.push('높은 유동성');
+                        }
+
+                        // 7. 신호 강도
+                        if (analysis.signal === 'BUY') {
+                            score += 35;
+                            reasons.push('매수 신호');
+                        } else if (analysis.signal === 'SELL') {
+                            score -= 25;
+                        }
+
+                        return {
+                            coin,
+                            score,
+                            reasons,
+                            analysis
+                        };
+                    })
+                    .filter(item => item.score > 50) // 최소 점수 필터
+                    .sort((a, b) => b.score - a.score)
+                    .slice(0, 12); // 상위 12개
+
+                if (scoredCoins.length === 0) {
+                    addLog('⚠️ 현재 시장 상황에서 추천할 만한 코인이 없습니다.', 'warning');
+                    document.getElementById('coinLoadStatus').textContent = '추천 코인 없음';
+                    return;
+                }
+
+                // 기존 선택 해제
+                document.querySelectorAll('input[id^="coin_"]').forEach(cb => cb.checked = false);
+
+                // AI 추천 코인 선택
+                scoredCoins.forEach(item => {
+                    const checkbox = document.getElementById(`coin_${item.coin.market}`);
+                    if (checkbox) checkbox.checked = true;
+                });
+
+                updateSelectedCoins();
+
+                // 추천 이유 로그
+                addLog(`🤖 AI가 ${scoredCoins.length}개 코인을 추천했습니다:`, 'success');
+                scoredCoins.slice(0, 5).forEach((item, index) => {
+                    const coinName = item.coin.market.replace('KRW-', '');
+                    const reasonText = item.reasons.slice(0, 3).join(', ');
+                    addLog(`${index + 1}. ${coinName} (점수: ${item.score.toFixed(0)}) - ${reasonText}`, 'info');
+                });
+
+                document.getElementById('coinLoadStatus').textContent = `✅ AI 추천 완료 (${scoredCoins.length}개)`;
+
+                // 추천 요약 표시
+                showAIRecommendationSummary(scoredCoins);
+
+            } catch (error) {
+                console.error('AI 추천 오류:', error);
+                addLog('❌ AI 추천 중 오류가 발생했습니다.', 'error');
+                document.getElementById('coinLoadStatus').textContent = '오류 발생';
+            }
+        }
+
+        // AI 추천 요약 표시
+        function showAIRecommendationSummary(scoredCoins) {
+            const summaryHtml = `
+                <div style="background: rgba(102, 126, 234, 0.1); padding: 15px; border-radius: 8px; margin-top: 15px; border: 2px solid #667eea;">
+                    <h4 style="color: #667eea; margin-bottom: 10px;">🤖 AI 추천 분석 결과</h4>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
+                        <div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 5px;">
+                            <div style="font-size: 0.9rem; color: #ccc;">추천 코인 수</div>
+                            <div style="font-size: 1.3rem; font-weight: bold; color: #667eea;">${scoredCoins.length}개</div>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 5px;">
+                            <div style="font-size: 0.9rem; color: #ccc;">평균 신뢰도</div>
+                            <div style="font-size: 1.3rem; font-weight: bold; color: #00ff00;">${(scoredCoins.reduce((sum, item) => sum + item.score, 0) / scoredCoins.length).toFixed(0)}점</div>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 5px;">
+                            <div style="font-size: 0.9rem; color: #ccc;">시장 상황</div>
+                            <div style="font-size: 1.1rem; font-weight: bold; color: #ffa500;">
+                                ${scoredCoins.filter(item => item.analysis.marketData.trend === 'UP').length > scoredCoins.length / 2 ? '상승장' : '조정장'}
+                            </div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 5px;">
+                        <strong>💡 주요 추천 이유:</strong><br>
+                        ${Array.from(new Set(scoredCoins.flatMap(item => item.reasons))).slice(0, 5).map(reason =>
+                            `<span style="background: rgba(102, 126, 234, 0.3); padding: 3px 8px; border-radius: 3px; margin: 3px; display: inline-block; font-size: 0.85rem;">${reason}</span>`
+                        ).join('')}
+                    </div>
+                </div>
+            `;
+
+            // 선택된 코인 요약 바로 위에 표시
+            const selectedSummary = document.getElementById('selectedSummary');
+            let aiSummary = document.getElementById('aiRecommendationSummary');
+
+            if (!aiSummary) {
+                aiSummary = document.createElement('div');
+                aiSummary.id = 'aiRecommendationSummary';
+                selectedSummary.parentNode.insertBefore(aiSummary, selectedSummary);
+            }
+
+            aiSummary.innerHTML = summaryHtml;
+        }
+
+        // 전체 선택
+        function selectAllCoins() {
+            document.querySelectorAll('input[id^="coin_"]').forEach(cb => cb.checked = true);
+            updateSelectedCoins();
+            addLog(`✅ 전체 코인 ${upbitCoins.length}개 선택됨`, 'success');
         }
 
         // 전체 해제
